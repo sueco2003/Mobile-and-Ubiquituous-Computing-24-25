@@ -1,0 +1,36 @@
+<resources>
+    <string name="app_name">ChargIST</string>
+
+
+    <string name="error_camera_unavailable">Camera unavailable</string>
+    <string name="error_no_internet_connection">No internet connection</string>
+    <string name="error_input_cannot_be_empty">Input cannot be empty</string>
+    <string name="error_signing_in">Error signing in</string>
+    <string name="error_unexpected">Unexpected error</string>
+    <string name="error_invalid_user">Invalid user</string>
+    <string name="error_userid_not_available">User ID not available</string>
+    <string name="error_could_not_create_user">Could not create user</string>
+    <string name="error_null_user_after_creating_account">Null user after creating account</string>
+
+
+
+
+    <string name="signup_title">Create your account</string>
+    <string name="signup_email_label">Email</string>
+    <string name="signup_password_label">Password</string>
+    <string name="signup_password_label_content_description">Password show or hide</string>
+    <string name="signup_password_confirm_label">Confirm Password</string>
+    <string name="signup_error_passwords_dont_match">Passwords don\'t match</string>
+    <string name="signup_btn_back_label">Go back to login</string>
+    <string name="signup_btn_text">Sign Up</string>
+
+    <string name="login_title">Login to your account</string>
+    <string name="login_no_account_label">Don\'t have an account yet?</string>
+    <string name="login_register_label">Sign Up</string>
+    <string name="login_btn_text">Sign In</string>
+    <string name="login_icon_person_description">Person Icon</string>
+    <string name="login_password_icon_description">Key Icon</string>
+
+
+
+</resources>

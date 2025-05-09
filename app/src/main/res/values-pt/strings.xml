@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ChargIST</string>
+    <string name="error_camera_unavailable">Câmera indisponível</string>
+    <string name="error_no_internet_connection">Não há conexão à internet</string>
+    <string name="error_name_cannot_be_empty">O nome não pode ser vazio</string>
+    <string name="signup_title">Crie a sua conta</string>
+    <string name="signup_email_label">Email</string>
+    <string name="signup_password_label">Palavra-passe</string>
+    <string name="signup_password_label_content_description">Mostrar ou esconder palavra-passe</string>
+    <string name="signup_password_confirm_label">Confirmar palavra-passe</string>
+    <string name="signup_error_passwords_dont_match">As palavras-passe não coincidem</string>
+    <string name="signup_btn_back_label">Voltar ao login</string>
+    <string name="signup_btn_text">Registar</string>
+    <string name="login_title">Faça login na sua conta</string>
+    <string name="login_no_account_label">Ainda não possui conta?</string>
+    <string name="login_register_label">Registar</string>
+    <string name="login_btn_text">Iniciar Sessão</string>
+    <string name="login_icon_person_description">Pessoa</string>
+    <string name="login_password_icon_description">Chave</string>
+</resources>

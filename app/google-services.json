@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "765464418634",
+    "project_id": "chargist-6ac28",
+    "storage_bucket": "chargist-6ac28.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:765464418634:android:1c99eea26cee233c1149b3",
+        "android_client_info": {
+          "package_name": "com.ist.chargist"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCgLJEQ_sDWH3UPtqDrEsG-vHzYn1TZFDQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
