@@ -6,19 +6,29 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 import com.ist.chargist.ui.theme.BackgroundColor
+import com.ist.chargist.ui.theme.ISTBlue
+import com.ist.chargist.ui.theme.TextColor
 import com.ist.chargist.utils.UiState
 import com.stevdzasan.onetap.OneTapSignInWithGoogle
 import com.stevdzasan.onetap.rememberOneTapSignInState
@@ -37,6 +47,8 @@ fun LoginScreen(
     val signInUserUiState by viewModel.signInUser
     val googleSignInUserUiState by viewModel.googleSignInUser
     val oneTapState = rememberOneTapSignInState()
+
+
     Scaffold(
         modifier = Modifier
             .statusBarsPadding()
@@ -50,6 +62,7 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
+
                 LoginContent(
                     signInUserUiState = signInUserUiState,
                     googleSignInUserUiState = googleSignInUserUiState,
@@ -58,11 +71,15 @@ fun LoginScreen(
                         oneTapState.open()
                         viewModel.setGoogleSigningState(UiState.Loading)
                     },
-                    goToSignup = goToSignup
+                    goToSignup = goToSignup,
+                    viewModel = viewModel
                 )
+
+
             }
         }
     )
+
     OneTapSignInWithGoogle(
         state = oneTapState,
         clientId = viewModel.authClientId,
@@ -74,12 +91,14 @@ fun LoginScreen(
             onDialogDismissed(message)
         }
     )
+
     LaunchedEffect(key1 = signInUserUiState) {
         when (signInUserUiState) {
             is UiState.Success -> {
                 navigateToHome()
+                // Reset state after navigation
+                viewModel.setGoogleSigningState(UiState.Idle)
             }
-
             is UiState.Error -> {
                 Toast.makeText(
                     context,

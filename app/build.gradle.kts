@@ -5,6 +5,7 @@ plugins {
     id("com.google.dagger.hilt.android")
     id("org.jetbrains.kotlin.kapt")
     id("com.google.gms.google-services") // Firebase plugin
+    id("kotlin-parcelize")
 }
 
 android {
@@ -66,6 +67,14 @@ dependencies {
     implementation(platform(libs.firebase.bom)) // Use latest BOM
     implementation(libs.google.firebase.analytics) // Or other Firebase services
     implementation(libs.firebase.database) // Realtime Database
+    implementation(libs.firebase.storage)
+
+    // Maps
+    implementation(libs.maps.compose) // Latest as of 2025
+    implementation(libs.play.services.maps)
+    
+    // Optional: Utility library for marker clustering, etc.
+    implementation(libs.maps.compose.utils)
 
 
     // Lottie for animations
@@ -76,6 +85,7 @@ dependencies {
 
     // Hilt dependencies
     implementation(libs.hilt.android)
+    implementation(libs.play.services.location)
     kapt(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
 

@@ -5,7 +5,6 @@ import android.net.Uri
 interface ImageRepository {
 
     suspend fun uploadImage(
-        collectionName: String,
         fileName: String,
         fileUri: Uri,
         referenceId: String,

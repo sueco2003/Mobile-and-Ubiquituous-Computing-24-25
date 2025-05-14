@@ -122,8 +122,8 @@ class FirebaseAuthImpl @Inject constructor(
         val newUser = user?.let {
             User(
                 userId = it.uid,
-                username = it.displayName ?: "Unknown", // Provide default value if displayName is null
-                userEmail = it.email ?: "Unknown" // Provide default value if email is null
+                username = it.displayName ?: "Unknown",
+                favourites = emptyList()// Provide default value if displayName is null
             )
         } ?: return Result.failure(Throwable(ERROR_INVALID_USER))
 

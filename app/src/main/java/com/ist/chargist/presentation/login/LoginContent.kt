@@ -32,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,8 +51,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hocel.assetmanager.presentation.components.GoogleButton
@@ -59,10 +58,8 @@ import com.ist.chargist.R
 import com.ist.chargist.presentation.components.CustomLottieAnimation
 import com.ist.chargist.presentation.components.HorizontalDividerWithText
 import com.ist.chargist.ui.theme.AssetChipColor
-import com.ist.chargist.ui.theme.ChargISTTheme
 import com.ist.chargist.ui.theme.ISTBlue
 import com.ist.chargist.ui.theme.TextColor
-import com.ist.chargist.utils.AppUtils
 import com.ist.chargist.utils.UiState
 
 @Composable
@@ -71,7 +68,8 @@ fun LoginContent(
     googleSignInUserUiState: UiState,
     onButtonClicked: (email: String, password: String) -> Unit,
     onGoogleSignClicked: () -> Unit,
-    goToSignup: () -> Unit
+    goToSignup: () -> Unit,
+    viewModel: LoginViewModel
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
@@ -79,18 +77,12 @@ fun LoginContent(
     var googleLoadingState by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
 
-    // MutableState to track the current language
-    var currentLanguage by remember { mutableStateOf(AppUtils.loadLanguagePreference(context)) }
+    // Derive loading state from existing UI states
+    val isLoading = signInUserUiState is UiState.Loading ||
+            googleSignInUserUiState is UiState.Loading
 
-    // Flag emoji based on current language
-    val flagEmoji = if (currentLanguage == "pt") "\uD83C\uDDF5\uD83C\uDDF9" else "\uD83C\uDDEC\uD83C\uDDE7" // 🇵🇹 or 🇬🇧
-
-    // Observe Google sign-in state
-    LaunchedEffect(key1 = googleSignInUserUiState) {
-        googleLoadingState = when (googleSignInUserUiState) {
-            is UiState.Loading -> true
-            else -> false
-        }
+    LaunchedEffect(googleSignInUserUiState) {
+        googleLoadingState = googleSignInUserUiState is UiState.Loading
     }
 
     Column(
@@ -106,35 +98,44 @@ fun LoginContent(
                 indication = null
             ) { focusManager.clearFocus() }
     ) {
-        // Display flag emoji to change language
-        Text(
-            text = flagEmoji,
-            fontSize = 30.sp,
-            modifier = Modifier.clickable {
-                val newLanguage = if (currentLanguage == "pt") "en" else "pt"
-                // Save and apply new language
-                AppUtils.saveLanguagePreference(context, newLanguage)
-                val updatedContext = AppUtils.setLocale(context, newLanguage)
-                currentLanguage = newLanguage // Update the language state
+        TextButton(
+            onClick = { viewModel.signInAsGuest() },
+            enabled = !isLoading,
+            modifier = Modifier
+                .width(150.dp)
+                .height(40.dp),
+            colors = // Custom colors for button background and text
+                ButtonDefaults.textButtonColors(
+                    containerColor = ISTBlue,  // Button background color
+                    contentColor = Color.White
+                ),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            if (signInUserUiState is UiState.Loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp)
+                )
+            } else {
+                Text(
+                    text = "Continue as guest",
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(4.dp)
+                )
             }
-        )
-
+        }
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Rest of your existing content
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(
                     painter = painterResource(id = R.drawable.ist_logo),
                     contentDescription = "Logo",
                     modifier = Modifier.size(100.dp)
                 )
-
                 Spacer(modifier = Modifier.width(16.dp))
-
                 Text(
-                    text = context.getString(R.string.app_name), // Use string resource to handle localization
+                    text = context.getString(R.string.app_name),
                     color = TextColor,
                     fontSize = 36.sp,
                     fontFamily = FontFamily.Cursive
@@ -144,20 +145,18 @@ fun LoginContent(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier
-                .weight(weight = 9f)
+            modifier = Modifier.weight(weight = 9f)
         ) {
             CustomLottieAnimation(
-                modifier = Modifier
-                    .size(150.dp),
+                modifier = Modifier.size(150.dp),
                 lottie = R.raw.login,
             )
             Spacer(modifier = Modifier.padding(10.dp))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 LoginFormContent(
-                    onButtonClicked,
-                    signInUserUiState,
-                    goToSignup
+                    onButtonClicked = onButtonClicked,
+                    signInUserUiState = signInUserUiState,
+                    goToSignup = goToSignup
                 )
             }
         }
@@ -291,46 +290,5 @@ private fun LoginFormContent(
             modifier = Modifier.clickable {
                 goToSignup()
             })
-    }
-}
-
-
-
-
-
-
-
-
-
-
-@Preview(showBackground = true)
-@Composable
-fun PreviewLoginContent() {
-    val onLoginClicked: (String, String) -> Unit = { _, _ -> }
-    val uiState = UiState.Idle
-    ChargISTTheme {
-        LoginContent(
-            signInUserUiState = uiState,
-            googleSignInUserUiState = uiState,
-            onButtonClicked = onLoginClicked,
-            onGoogleSignClicked = {}
-        ) {
-        }
-    }
-}
-
-@PreviewLightDark
-@Composable
-fun PreviewLoginDARKContent() {
-    val onLoginClicked: (String, String) -> Unit = { _, _ -> }
-    val uiState = UiState.Idle
-    ChargISTTheme {
-        LoginContent(
-            signInUserUiState = uiState,
-            googleSignInUserUiState = uiState,
-            onButtonClicked = onLoginClicked,
-            onGoogleSignClicked = {}
-        ) {
-        }
     }
 }

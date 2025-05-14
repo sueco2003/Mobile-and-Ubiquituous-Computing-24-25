@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun getStartDestination(): String {
-        return if (authRepo.isUserLoggedIn) Screen.Dashboard.route
+        return if (authRepo.isUserLoggedIn) Screen.Map.route
         else Screen.Login.route
     }
 }

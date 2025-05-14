@@ -8,12 +8,12 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.ist.chargist.presentation.signup.SignupScreen
 import com.hocel.assetmanager.presentation.authentication.signup.SignupViewModel
-import com.ist.chargist.presentation.dashboard.DashboardScreen
-import com.ist.chargist.presentation.dashboard.DashboardViewModel
 import com.ist.chargist.presentation.login.LoginScreen
 import com.ist.chargist.presentation.login.LoginViewModel
+import com.ist.chargist.presentation.map.MapScreen
+import com.ist.chargist.presentation.map.MapViewModel
+import com.ist.chargist.presentation.signup.SignupScreen
 import com.ist.chargist.utils.UiState
 import timber.log.Timber
 
@@ -31,7 +31,7 @@ fun SetupNavGraph(
 
         loginRoute(
             navigateToHome = {
-                navController.navigate(Screen.Dashboard.route) {
+                navController.navigate(Screen.Map.route) {
                     popUpTo(navController.graph.findStartDestination().id) {
                         inclusive = true
                     }
@@ -49,7 +49,7 @@ fun SetupNavGraph(
             }
         )
 
-        dashboardRoute(
+        mapRoute(
             onLogoutClick = {
                 navController.navigate(Screen.Login.route) {
                     popUpTo(navController.graph.findStartDestination().id) {
@@ -113,18 +113,20 @@ fun NavGraphBuilder.signupRoute(
     }
 }
 
-fun NavGraphBuilder.dashboardRoute(
+fun NavGraphBuilder.mapRoute(
     onLogoutClick: () -> Unit,
 ) {
-    composable(route = Screen.Dashboard.route) {
-        val viewModel: DashboardViewModel = hiltViewModel()
+    composable(route = Screen.Map.route) {
+        val viewModel: MapViewModel = hiltViewModel()
 
-        DashboardScreen(
+        MapScreen(
             viewModel = viewModel,
             onLogoutClick = {
                 viewModel.signOutUser()
                 onLogoutClick()
-            }
+            },
+            navigateToAddChargerStation = null,
+            onChargerStationClick = null
         )
     }
 }

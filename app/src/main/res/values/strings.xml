@@ -12,6 +12,11 @@
     <string name="error_could_not_create_user">Could not create user</string>
     <string name="error_null_user_after_creating_account">Null user after creating account</string>
 
+    <string name="error_loading_stations">Failed to load charging stations</string>
+    <string name="unexpected_error">An unexpected error occurred</string>
+    <string name="location_permission_denied">Location permission required</string>
+    <string name="location_unavailable">Location services unavailable</string>
+
 
 
 

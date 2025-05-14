@@ -47,6 +47,18 @@ class LoginViewModel @Inject constructor(
         }
     }
 
+    fun signInAsGuest() {
+        viewModelScope.launch {
+            _signInUser.value = UiState.Loading
+            try {
+                FirebaseAuth.getInstance().signInAnonymously().await()
+                _signInUser.value = UiState.Success("Guest user")
+            } catch (e: Exception) {
+                _signInUser.value = UiState.Error("Guest login failed: ${e.message}")
+            }
+        }
+    }
+
     fun firebaseAuthWithGoogle(
         tokenId: String,
         onSuccess: () -> Unit,
@@ -77,5 +89,6 @@ class LoginViewModel @Inject constructor(
                 }
         }
     }
+
 
 }
