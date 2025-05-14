@@ -5,6 +5,8 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,6 +61,30 @@ fun MapScreen(
     val cameraPosition by viewModel.cameraPosition.collectAsState()
     val forceUpdate by viewModel.locationUpdates.collectAsState()
 
+    var hasLocationPermission by remember {
+        mutableStateOf(context.hasLocationPermissions())
+    }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasLocationPermission = isGranted
+        if (isGranted) {
+            viewModel.getCurrentLocation()
+        } else {
+            Toast.makeText(context, "Location permission required", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    var permissionRequested by remember { mutableStateOf(false) }
+
+    LaunchedEffect(hasLocationPermission) {
+        if (!hasLocationPermission && !permissionRequested) {
+            permissionRequested = true
+            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
+
     // Error handling
     LaunchedEffect(Unit) {
         viewModel.errors.collect { message ->
@@ -88,7 +114,7 @@ fun MapScreen(
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraState,
-            properties = MapProperties(isMyLocationEnabled = true)
+            properties = MapProperties(isMyLocationEnabled = hasLocationPermission)
         ) {
             // Existing marker code...
             when (chargerStationsUiState) {
