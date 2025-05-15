@@ -3,6 +3,7 @@ package com.ist.chargist.ui.theme
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.ist.chargist.R
 
 
 val blueBG = Color(0xFFF4F7FD)
@@ -76,6 +77,10 @@ val LineDividerColor: Color
 val DialogBackground: Color
     @Composable
     get() = if (!isSystemInDarkTheme()) dialogBackground else dialogBackgroundDark
+
+val ImageDialog: Int
+    @Composable
+    get() = if (!isSystemInDarkTheme()) R.drawable.ic_dialog_light else R.drawable.ic_dialog_dark
 
 val HorizontalDividerColor: Color
     @Composable

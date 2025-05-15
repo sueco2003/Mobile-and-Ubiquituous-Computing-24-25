@@ -1,31 +1,39 @@
-/*
 package com.ist.chargist.presentation.addCharger
 
-import android.net.Uri
+import android.content.Context
+import android.location.Geocoder
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ist.chargist.ChargISTApp
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.maps.model.LatLng
 import com.ist.chargist.domain.DatabaseRepository
 import com.ist.chargist.domain.ImageRepository
 import com.ist.chargist.domain.model.ChargerStation
 import com.ist.chargist.utils.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
-import timber.log.Timber
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
-import androidx.core.net.toUri
 
 @HiltViewModel
 class AddChargerViewModel @Inject constructor(
     private val dbRepo: DatabaseRepository,
     private val imageDb: ImageRepository,
+    private val locationClient: FusedLocationProviderClient
 ) : ViewModel() {
 
     private val _creatingCharger: MutableState<UiState> = mutableStateOf(UiState.Idle)
     val creatingCharger: State<UiState> get() = _creatingCharger
+
+    private val _chargerLocation: MutableState<UiState> = mutableStateOf(UiState.Idle)
+    val chargerLocation: State<UiState> get() = _chargerLocation
+
+    private val _myLocation: MutableState<UiState> = mutableStateOf(UiState.Idle)
+    val myLocation: State<UiState> get() = _myLocation
 
     var onSelectCamera: (() -> Unit)? = null
     var onSelectGallery: (() -> Unit)? = null
@@ -53,11 +61,9 @@ class AddChargerViewModel @Inject constructor(
                                     _creatingCharger.value = UiState.Success(it)
                                 }
                                 .onFailure {
-                                    Timber.e("EXCEPTION ERROR FROM UPDATE LOCATION:${it.message}")
                                     _creatingCharger.value = UiState.Error(it.message)
                                 }
                         }.onFailure {
-                            Timber.e("EXCEPTION ERROR FROM UPLOAD IMAGE LOCATION:${it.message}")
                             _creatingCharger.value = UiState.Error(it.message)
                         }
                     }
@@ -65,31 +71,45 @@ class AddChargerViewModel @Inject constructor(
                     _creatingCharger.value = UiState.Error(it.message)
                 }
         }
-
     }
-    private val _creatingCharger = mutableStateOf<UiState>(UiState.Idle
-    val creatingCharger: State<UiState> = _creatingCharger
 
-    fun getCurrentLocation(onSuccess: (LatLng) -> Unit) {
+    fun searchLocation(query: String, context: Context) {
         viewModelScope.launch {
+            _chargerLocation.value = UiState.Loading
             try {
-                val location = locationClient.lastLocation.await()
-                location?.let {
-                    onSuccess(LatLng(it.latitude, it.longitude))
+                val geocoder = Geocoder(context)
+                val addresses = geocoder.getFromLocationName(query, 1)
+                val address = addresses?.firstOrNull()
+
+                if (address != null) {
+                    _chargerLocation.value =
+                        UiState.Success(listOf(address.latitude.toString(), address.longitude.toString()))
+                } else {
+                    _chargerLocation.value = UiState.Error("Location not found")
                 }
-            } catch (e: SecurityException) {
-                // Handle permission error
+            } catch (e: Exception) {
+                _chargerLocation.value =
+                    UiState.Error("Search failed: ${e.message ?: "Unknown error"}")
             }
         }
     }
 
-    fun getAddressFromLocation(latLng: LatLng): String {
-        return try {
-            val geocoder = Geocoder(context)
-            val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
-            addresses?.firstOrNull()?.getAddressLine(0) ?: ""
-        } catch (e: Exception) {
-            ""
+    fun getCurrentLocation() {
+        viewModelScope.launch {
+            _myLocation.value = UiState.Loading
+            try {
+                val location = locationClient.lastLocation.await()
+                if (location != null) {
+                    _myLocation.value =
+                        UiState.Success(listOf(location.latitude.toString(), location.longitude.toString()))
+                } else {
+                    _myLocation.value = UiState.Error("Location unavailable")
+                }
+            } catch (e: SecurityException) {
+                _myLocation.value = UiState.Error("Permission required")
+            } catch (e: Exception) {
+                _myLocation.value = UiState.Error("Error: ${e.message ?: "Unknown error"}")
+            }
         }
     }
-}*/
+}

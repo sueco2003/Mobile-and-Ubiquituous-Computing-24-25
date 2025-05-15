@@ -5,7 +5,7 @@ import kotlinx.parcelize.Parcelize
 
 @Parcelize
 data class ChargerStation(
-    val id: String,
+    val id: String = "",
     val name: String,
     val lat : Float,
     val lon : Float,

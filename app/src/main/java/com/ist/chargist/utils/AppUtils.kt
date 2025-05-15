@@ -1,6 +1,9 @@
 package com.ist.chargist.utils
 
 import android.content.Context
+import android.net.Uri
+import androidx.core.content.FileProvider
+import java.io.File
 import java.util.Locale
 
 object AppUtils {
@@ -24,5 +27,20 @@ object AppUtils {
         val config = base.resources.configuration
         config.setLocale(locale)
         return base.createConfigurationContext(config)
+    }
+    fun createImageUri(context: Context): Uri {
+        val directory = File(context.cacheDir, "images")
+        directory.mkdirs()
+        val file = File.createTempFile(
+            "image_",
+            ".jpg",
+            directory,
+        )
+        val authority = context.packageName + ".fileprovider"
+        return FileProvider.getUriForFile(
+            context,
+            authority,
+            file,
+        )
     }
 }

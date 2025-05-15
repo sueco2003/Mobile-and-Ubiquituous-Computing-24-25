@@ -3,16 +3,21 @@ package com.ist.chargist.navigation
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.google.android.gms.maps.model.LatLng
 import com.hocel.assetmanager.presentation.authentication.signup.SignupViewModel
+import com.ist.chargist.presentation.addCharger.AddChargerScreen
+import com.ist.chargist.presentation.addCharger.AddChargerViewModel
 import com.ist.chargist.presentation.login.LoginScreen
 import com.ist.chargist.presentation.login.LoginViewModel
 import com.ist.chargist.presentation.map.MapScreen
 import com.ist.chargist.presentation.map.MapViewModel
+import com.ist.chargist.presentation.mapLocationPicker.MapLocationPickerScreen
 import com.ist.chargist.presentation.signup.SignupScreen
 import com.ist.chargist.utils.UiState
 import timber.log.Timber
@@ -57,6 +62,31 @@ fun SetupNavGraph(
                     }
                     launchSingleTop = true
                 }
+            },
+            navigateToAddChargerStation = {
+                navController.navigate(Screen.AddCharger.route)
+            }
+        )
+
+        addChargerStationRoute(
+            navigateBack = {
+                navController.popBackStack()
+                navController.navigate(Screen.Map.route)
+            },
+            navigateToMapLocationPicker = {
+                navController.navigate(Screen.MapLocationPicker.route)
+            },
+            navController = navController
+        )
+        mapLocationPicker(
+            navigateBack = {
+                navController.navigateUp()
+            },
+            onLocationSelected = { latLng ->
+                navController.previousBackStackEntry
+                    ?.savedStateHandle
+                    ?.set("selected_location", latLng)
+                navController.popBackStack()
             }
         )
 
@@ -115,6 +145,7 @@ fun NavGraphBuilder.signupRoute(
 
 fun NavGraphBuilder.mapRoute(
     onLogoutClick: () -> Unit,
+    navigateToAddChargerStation: () -> Unit,
 ) {
     composable(route = Screen.Map.route) {
         val viewModel: MapViewModel = hiltViewModel()
@@ -125,9 +156,42 @@ fun NavGraphBuilder.mapRoute(
                 viewModel.signOutUser()
                 onLogoutClick()
             },
-            navigateToAddChargerStation = null,
+            navigateToAddChargerStation = navigateToAddChargerStation,
             onChargerStationClick = null
         )
+    }
+}
+
+fun NavGraphBuilder.addChargerStationRoute(
+    navigateBack: () -> Unit,
+    navController: NavController,
+    navigateToMapLocationPicker: () -> Unit
+) {
+    composable(
+        route = Screen.AddCharger.route
+    ) {
+        val viewModel: AddChargerViewModel = hiltViewModel()
+        AddChargerScreen(viewModel = viewModel,
+            navigateBack = navigateBack,
+            onSaveClicked = { charger ->
+                viewModel.createCharger(charger)
+            },
+            navigateToMapLocationPicker = navigateToMapLocationPicker,
+            navController = navController)
+    }
+}
+fun NavGraphBuilder.mapLocationPicker(
+    navigateBack: () -> Unit,
+    onLocationSelected: (LatLng) -> Unit
+) {
+    composable(
+        route = Screen.MapLocationPicker.route
+    ) {
+        MapLocationPickerScreen(
+            navigateBack = navigateBack,
+            onLocationSelected = onLocationSelected
+        )
+
     }
 }
 

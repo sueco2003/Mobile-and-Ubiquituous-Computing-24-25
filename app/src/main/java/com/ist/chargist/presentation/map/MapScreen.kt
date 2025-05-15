@@ -2,8 +2,10 @@ package com.ist.chargist.presentation.map
 
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,6 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -32,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -43,6 +48,7 @@ import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.google.maps.android.ktx.model.cameraPosition
 import com.ist.chargist.domain.model.ChargerStation
 import com.ist.chargist.utils.UiState
 
@@ -51,44 +57,42 @@ import com.ist.chargist.utils.UiState
 fun MapScreen(
     viewModel: MapViewModel = viewModel(),
     onLogoutClick: () -> Unit,
-    navigateToAddChargerStation: (() -> Unit)?,
+    navigateToAddChargerStation: () -> Unit,
     onChargerStationClick: ((ChargerStation) -> Unit)?
 ) {
     val context = LocalContext.current
     val chargerStationsUiState by viewModel.chargerStationList
-
-
     val cameraPosition by viewModel.cameraPosition.collectAsState()
     val forceUpdate by viewModel.locationUpdates.collectAsState()
+    val activity = context as Activity
 
-    var hasLocationPermission by remember {
-        mutableStateOf(context.hasLocationPermissions())
-    }
-
-    val locationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
+    // Permission launcher
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        hasLocationPermission = isGranted
-        if (isGranted) {
-            viewModel.getCurrentLocation()
-        } else {
-            Toast.makeText(context, "Location permission required", Toast.LENGTH_SHORT).show()
+        if (!isGranted) {
+            Toast.makeText(
+                context,
+                "Location permission required for map features",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
-    var permissionRequested by remember { mutableStateOf(false) }
-
-    LaunchedEffect(hasLocationPermission) {
-        if (!hasLocationPermission && !permissionRequested) {
-            permissionRequested = true
-            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-    }
-
-    // Error handling
+    // Check permission when screen loads
     LaunchedEffect(Unit) {
-        viewModel.errors.collect { message ->
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        when {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                // Permission already granted - proceed
+            }
+
+            else -> {
+                // Request permission directly
+                permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            }
         }
     }
 
@@ -109,12 +113,10 @@ fun MapScreen(
         }
     }
 
-
     Box(modifier = Modifier.fillMaxSize()) {
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
-            cameraPositionState = cameraState,
-            properties = MapProperties(isMyLocationEnabled = hasLocationPermission)
+            cameraPositionState = cameraState
         ) {
             // Existing marker code...
             when (chargerStationsUiState) {
@@ -182,7 +184,7 @@ fun MapScreen(
 
             // Add Station FAB
             FloatingActionButton(
-                onClick = onLogoutClick,
+                onClick = navigateToAddChargerStation,
                 modifier = Modifier
                     .padding(8.dp)
             ) {
@@ -198,14 +200,4 @@ fun MapScreen(
             }
         }
     }
-}
-
-fun Context.hasLocationPermissions(): Boolean {
-    return ContextCompat.checkSelfPermission(
-        this,
-        Manifest.permission.ACCESS_FINE_LOCATION
-    ) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(
-        this,
-        Manifest.permission.ACCESS_COARSE_LOCATION
-    ) == PackageManager.PERMISSION_GRANTED
 }

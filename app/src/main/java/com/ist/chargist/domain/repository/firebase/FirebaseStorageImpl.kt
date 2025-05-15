@@ -12,32 +12,11 @@ import kotlin.coroutines.suspendCoroutine
 
 
 class FirebaseStorageImpl @Inject constructor() : ImageRepository {
-    override suspend fun uploadImage(
-        fileName: String,
-        fileUri: Uri,
-        referenceId: String
-    ): Result<String> {
-        TODO("Not yet implemented")
-    }
 
-    override suspend fun deleteImageFromStorage(
-        referenceId: String,
-        fileName: String
-    ): Result<Unit> {
-        TODO("Not yet implemented")
-    }
-
-    override fun getDefaultImage(id: String): Int {
-        TODO("Not yet implemented")
-    }
-
-}
-/*
 
     private val defaultImageMapper = mutableMapOf<String, Int>()
 
     override suspend fun uploadImage(
-        collectionName: String,
         fileName: String,
         fileUri: Uri,
         referenceId: String,
@@ -98,4 +77,4 @@ class FirebaseStorageImpl @Inject constructor() : ImageRepository {
         defaultImageMapper[id] = newDefaultImage
         return newDefaultImage
     }
-}*/
+}

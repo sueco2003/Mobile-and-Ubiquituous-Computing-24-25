@@ -35,7 +35,15 @@
     <string name="login_btn_text">Sign In</string>
     <string name="login_icon_person_description">Person Icon</string>
     <string name="login_password_icon_description">Key Icon</string>
+    <string name="upload_image">Upload image</string>
+    <string name="btn_back_arrow_content_description">Go back</string>
+    <string name="location_add_title">Add location</string>
+    <string name="btn_add_location_button_label">Add new charger station</string>
+    <string name="charger_name_label_hint">Station name</string>
+    <string name="address_label_hint">Address/Coordinates</string>
 
+    <string name="new_collection_dialog_title">Congratulations!</string>
+    <string name="new_location_dialog_subtitle">Your charger has been created!</string>
 
 
 </resources>

@@ -1,7 +1,10 @@
-/*
 package com.ist.chargist.presentation.addCharger
 
+import android.Manifest
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,11 +14,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -23,55 +24,62 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
+import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.LatLng
-import com.google.type.LatLng
+
 import com.ist.chargist.R
 import com.ist.chargist.domain.model.ChargerStation
+import com.ist.chargist.presentation.components.AddChargerDialog
+import com.ist.chargist.presentation.components.PaymentMethodButton
+import com.ist.chargist.presentation.components.imageUpload.DocumentUploadItem
+import com.ist.chargist.presentation.components.imageUpload.ImageSelectorSheet
 import com.ist.chargist.ui.theme.BackgroundColor
 import com.ist.chargist.ui.theme.ISTBlue
+import com.ist.chargist.ui.theme.TextColor
 import com.ist.chargist.utils.UiState
-import kotlin.Boolean
-import kotlin.Int
-import kotlin.OptIn
-import kotlin.String
-import kotlin.TODO
-import kotlin.Unit
-import kotlin.apply
-import kotlin.collections.List
-import kotlin.collections.forEach
-import kotlin.collections.forEachIndexed
-import kotlin.collections.get
-import kotlin.collections.listOf
-import kotlin.text.format
-import kotlin.text.set
-import kotlin.text.trim
 
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddChargerScreen(
     viewModel: AddChargerViewModel,
+    navigateToMapLocationPicker: () -> Unit,
     navigateBack: () -> Unit,
+    navController: NavController,
     onSaveClicked: (ChargerStation) -> Unit
 ) {
     val context = LocalContext.current
     var cameraPermissionGranted by remember { mutableStateOf(false) }
-    val locationPermissionState = rememberPermissionState(Manifest.permission.ACCESS_FINE_LOCATION)
     val requestCameraPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
         cameraPermissionGranted = isGranted
         if (!isGranted) {
             Toast.makeText(
@@ -82,298 +90,339 @@ fun AddChargerScreen(
         }
     }
 
-    val creatingDocumentUiState by viewModel.creatingCharger.collectAsState()
 
-    LaunchedEffect(Unit) {
-        if (!locationPermissionState.status.isGranted) {
-            locationPermissionState.launchPermissionRequest()
-        }
-    }
-
+    val creatingDocumentUiState by viewModel.creatingCharger
     Scaffold(
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = navigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go Back")
+            TopAppBar(navigationIcon = {
+                IconButton(onClick = navigateBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.btn_back_arrow_content_description)
+                    )
+                }
+            }, title = {
+                Text(
+                    text = stringResource(R.string.location_add_title),
+                    fontWeight = FontWeight.Bold
+                )
+
+            }, colors = TopAppBarDefaults.topAppBarColors(containerColor = BackgroundColor)
+            )
+        }) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .padding(top = paddingValues.calculateTopPadding())
+                .background(BackgroundColor)
+                .fillMaxSize()
+        ) {
+            AddChargerContent(
+                modifier = Modifier.fillMaxSize(),
+                viewModel = viewModel,
+                navController = navController,
+                creatingDocumentUiState = creatingDocumentUiState,
+                onSelectCamera = {
+                    if (!cameraPermissionGranted) {
+                        requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    } else {
+                        viewModel.onSelectCamera?.invoke()
                     }
                 },
-                title = { Text("Add Charger") },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = BackgroundColor)
+                onSelectGallery = {
+                    viewModel.onSelectGallery?.invoke()
+                },
+                navigateBack = navigateBack,
+                navigateToMapLocationPicker = navigateToMapLocationPicker,
+                onSaveClicked = {
+                    onSaveClicked(it)
+                }
             )
         }
-    ) { paddingValues ->
-        AddChargerContent(
-            modifier = Modifier.padding(paddingValues),
-            viewModel = viewModel,
-            navigateBack = navigateBack,
-            onSaveClicked = onSaveClicked,
-            requestCameraPermission = {
-                requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-            },
-            cameraPermissionGranted = cameraPermissionGranted,
-            locationPermissionGranted = locationPermissionState.status.isGranted
-        )
     }
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddChargerContent(
     modifier: Modifier = Modifier,
     viewModel: AddChargerViewModel,
+    creatingDocumentUiState: UiState,
+    onSelectCamera: () -> Unit,
+    onSelectGallery: () -> Unit,
     navigateBack: () -> Unit,
-    onSaveClicked: (ChargerStation) -> Unit,
-    requestCameraPermission: () -> Unit,
-    cameraPermissionGranted: Boolean,
-    locationPermissionGranted: Boolean
+    navController: NavController,
+    navigateToMapLocationPicker: () -> Unit,
+    onSaveClicked: (ChargerStation) -> Unit
 ) {
-    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
-    var showMapPicker by remember { mutableStateOf(false) }
-    var currentLocation by remember { mutableStateOf<LatLng?>(null) }
-    var address by remember { mutableStateOf("") }
-    var chargingPositions by remember { mutableStateOf(listOf<ChargingPosition>()) }
-    var imageUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedMethod by remember { mutableStateOf<String?>("credit") }
+    var searchQuery by remember { mutableStateOf("") }
     var showBottomSheet by remember { mutableStateOf(false) }
+    var showDialog by remember { mutableStateOf(false) }
+    var imageUri by remember { mutableStateOf<Uri?>(null) }
+    val chargerLocationState = viewModel.chargerLocation
+    val myLocationState = viewModel.myLocation
 
+    val selectedLocation = navController
+        .currentBackStackEntry
+        ?.savedStateHandle
+        ?.getStateFlow<LatLng?>("selected_location", null)
+        ?.collectAsState()
 
-    if (showMapPicker) {
-        LocationPickerDialog(
-            onLocationSelected = { latLng, addr ->
-                currentLocation = latLng
-                address = addr
-                showMapPicker = false
-            },
-            onDismiss = { showMapPicker = false }
-        )
+    LaunchedEffect(selectedLocation?.value) {
+        selectedLocation?.value?.let { latLng ->
+            searchQuery = "${latLng.latitude}, ${latLng.longitude}"
+        }
     }
 
-    Column(modifier = modifier
-        .fillMaxSize()
-        .background(BackgroundColor)) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp)
-        ) {
-            // Image Upload
-            DocumentUploadSection(
-                imageUri = imageUri,
-                onSelectImage = { uri -> imageUri = uri },
-                requestCameraPermission = requestCameraPermission,
-                cameraPermissionGranted = cameraPermissionGranted,
-                showBottomSheet = { showBottomSheet = it }
+    val context = LocalContext.current
+    if (showBottomSheet) {
+        ModalBottomSheet(onDismissRequest = { showBottomSheet = false }) {
+            ImageSelectorSheet(
+                onSelectCamera = onSelectCamera,
+                onSelectGallery = onSelectGallery,
+                onClose = {
+                    showBottomSheet = false
+                }
             )
+        }
+    }
 
-            Spacer(Modifier.height(24.dp))
+    LaunchedEffect(chargerLocationState.value) {
+        when (val state = chargerLocationState.value) {
+            is UiState.Success -> {
+                val locationStrings = state.data as? List<String>
+                val lat = locationStrings?.getOrNull(0)?.toFloatOrNull()
+                val lon = locationStrings?.getOrNull(1)?.toFloatOrNull()
 
-            // Name Input
+                if (lat != null && lon != null) {
+                    onSaveClicked(
+                        ChargerStation(
+                            name = name.trim(),
+                            imageUri = imageUri?.toString(),
+                            lat = lat,
+                            lon = lon,
+                            payment = selectedMethod.toString()
+                        )
+                    )
+                } else {
+                    Toast.makeText(context, "Invalid location data", Toast.LENGTH_SHORT).show()
+                }
+            }
+            is UiState.Error -> {
+                Toast.makeText(context, state.message ?: "Invalid address", Toast.LENGTH_SHORT).show()
+            }
+            else -> { }
+        }
+    }
+
+    LaunchedEffect(myLocationState.value) {
+        when (val state = myLocationState.value) {
+            is UiState.Success -> {
+                val locationStrings = state.data as? List<String>
+                val lat = locationStrings?.getOrNull(0)
+                val lon = locationStrings?.getOrNull(1)
+                if (lat != null && lon != null) {
+                    searchQuery = "$lat, $lon"
+                }
+            }
+            is UiState.Error -> {
+                Toast.makeText(context, state.message ?: "Invalid address", Toast.LENGTH_SHORT).show()
+            }
+            else -> { }
+        }
+    }
+
+
+    Column(
+        modifier = modifier
+            .padding(16.dp)
+    ) {
+        Column(Modifier.weight(9f)) {
+            Spacer(modifier = Modifier.height(16.dp))
+            DocumentUploadItem(
+                onClick = { onSelectGallery, onSelectCamera ->
+                    showBottomSheet = true
+                    viewModel.onSelectCamera = onSelectCamera
+                    viewModel.onSelectGallery = onSelectGallery
+                },
+                onImageChosen = {
+                    showBottomSheet = false
+                    imageUri = it
+                },
+                imageUriSaved = imageUri
+            )
+            Spacer(modifier = Modifier.height(16.dp))
             OutlinedTextField(
                 value = name,
-                onValueChange = { name = it },
-                label = { Text("Charger Name") },
+                onValueChange = {
+                    name = it
+                },
+                label = {
+                    Text(
+                        text = stringResource(R.string.charger_name_label_hint),
+                        color = TextColor
+                    )
+                },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp)
             )
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Location Section
-            LocationSelectionSection(
-                address = address,
-                currentLocation = currentLocation,
-                locationPermissionGranted = locationPermissionGranted,
-                onMapClick = { showMapPicker = true },
-                onCurrentLocationClick = {
-                    viewModel.getCurrentLocation { location ->
-                        currentLocation = location
-                        address = viewModel.getAddressFromLocation(location)
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = {
+                    searchQuery = it
+                },
+                label = {
+                    Text(
+                        text = stringResource(R.string.address_label_hint),
+                        color = TextColor
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Button(
+                    onClick = { viewModel.getCurrentLocation() },
+                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = "Location"
+                    )
+                }
+
+                Button(
+                    onClick = { navigateToMapLocationPicker() },
+                    modifier = Modifier.weight(1f).padding(start = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Map,
+                        contentDescription = "Map"
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .background(
+                        color = Color(0xFFF0F0F0), // Light gray background
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    .padding(16.dp) // Inner padding
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Payment System",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        PaymentMethodButton(
+                            label = "Credit Card",
+                            isSelected = selectedMethod == "credit",
+                            onClick = { selectedMethod = "credit" }
+                        )
+
+                        PaymentMethodButton(
+                            label = "PayPal",
+                            isSelected = selectedMethod == "paypal",
+                            onClick = { selectedMethod = "paypal" }
+                        )
+                    }
+                }
+            }
+        }
+
+        Column(Modifier.weight(1f)) {
+            Button(
+                onClick = {
+                    when {
+                        name.isEmpty() -> Toast.makeText(
+                            context,
+                            context.getString(R.string.error_input_cannot_be_empty),
+                            Toast.LENGTH_SHORT
+                        ).show()
+
+                        searchQuery.isEmpty() -> Toast.makeText(
+                            context,
+                            "Search query cannot be empty",
+                            Toast.LENGTH_SHORT
+                        ).show()
+
+                        else -> {
+                            viewModel.searchLocation(searchQuery, context)
+                        }
                     }
                 },
-                onAddressChange = { address = it }
-            )
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors().copy(containerColor = ISTBlue),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                when (creatingDocumentUiState) {
+                    UiState.Loading -> {
+                        CircularProgressIndicator()
+                    }
 
-            Spacer(Modifier.height(24.dp))
+                    is UiState.Error -> {
+                        Toast.makeText(
+                            context,
+                            creatingDocumentUiState.message,
+                            Toast.LENGTH_SHORT
+                        ).show()
 
-            // Charging Positions
-            ChargingPositionsSection(
-                positions = chargingPositions,
-                onAddPosition = { chargingPositions = chargingPositions + ChargingPosition() },
-                onSpeedChange = { index, speed ->
-                    chargingPositions = chargingPositions.toMutableList().apply {
-                        this[index] = this[index].copy(speed = speed)
+                        Text(
+                            text = stringResource(R.string.btn_add_location_button_label),
+                            fontSize = 16.sp,
+                            color = Color.White
+                        )
+                    }
+                    is UiState.Fail,
+                    UiState.Idle ->{
+                        Text(
+                            text = stringResource(R.string.btn_add_location_button_label),
+                            fontSize = 16.sp,
+                            color = Color.White
+                        )
+                    }
+                    is UiState.Success -> {
+                        showDialog = true
+                        Text(
+                            text = stringResource(R.string.btn_add_location_button_label),
+                            fontSize = 16.sp,
+                            color = Color.White
+                        )
                     }
                 }
-            )
-        }
-
-        // Save Button
-        Button(
-            onClick = {
-                if (validateInputs(name, currentLocation, chargingPositions, imageUri)) {
-                    onSaveClicked(
-                        ChargerStation(
-                            name = name.trim(),
-                            lat = currentLocation!!.latitude,
-                            lon = currentLocation!!.longitude,
-                            address = address,
-                            chargingSpeeds = chargingPositions.map { it.speed },
-                            imageUri = imageUri?.toString() ?: ""
-                        )
-                    )
-                } else {
-                    Toast.makeText(
-                        context,
-                        "Please fill all required fields and select a location",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .height(56.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = ISTBlue)
-        ) {
-            if (creatingDocumentUiState is UiState.Loading) {
-                CircularProgressIndicator(color = Color.White)
-            } else {
-                Text("Save Charger", color = Color.White)
             }
         }
     }
-
-    if (showBottomSheet) {
-        ImagePickerBottomSheet(
-            onCameraSelected = {
-                if (cameraPermissionGranted) {
-                    viewModel.openCamera(context)
-                } else {
-                    requestCameraPermission()
-                }
-            },
-            onGallerySelected = { viewModel.openGallery(context) },
-            onDismiss = { showBottomSheet = false }
-        )
-    }
-}
-
-@Composable
-private fun LocationSelectionSection(
-    address: String,
-    currentLocation: LatLng?,
-    locationPermissionGranted: Boolean,
-    onMapClick: () -> Unit,
-    onCurrentLocationClick: () -> Unit,
-    onAddressChange: (String) -> Unit
-) {
-    Column {
-        Text("Location Selection", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = onMapClick,
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Icon(Icons.Default.Map, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Pick on Map")
-            }
-
-            Button(
-                onClick = onCurrentLocationClick,
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                enabled = locationPermissionGranted
-            ) {
-                Icon(Icons.Default.MyLocation, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Current Location")
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = address,
-            onValueChange = onAddressChange,
-            label = { Text("Address") },
-            modifier = Modifier.fillMaxWidth(),
-            leadingIcon = {
-                Icon(Icons.Default.LocationOn, contentDescription = "Address icon")
+    if (showDialog) {
+        AddChargerDialog(
+            navigateBack = {
+                navigateBack()
             }
         )
-
-        if (currentLocation != null) {
-            Text(
-                text = "Selected location: ${"%.4f".format(currentLocation.latitude)}, " +
-                        "${"%.4f".format(currentLocation.longitude)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 
-@Composable
-private fun ChargingPositionsSection(
-    positions: List<ChargingPosition>,
-    onAddPosition: () -> Unit,
-    onSpeedChange: (Int, ChargingSpeed) -> Unit
-) {
-    Column {
-        Text("Charging Positions", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
-
-        positions.forEachIndexed { index, position ->
-            ChargingPositionItem(
-                positionNumber = index + 1,
-                speed = position.speed,
-                onSpeedChange = { onSpeedChange(index, it) }
-            )
-        }
-
-        Button(
-            onClick = onAddPosition,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "Add position")
-            Spacer(Modifier.width(8.dp))
-            Text("Add Charging Position")
-        }
-    }
-}
-
-@Composable
-private fun ChargingPositionItem(
-    positionNumber: Int,
-    speed: ChargingSpeed,
-    onSpeedChange: (ChargingSpeed) -> Unit
-) {
-    Column(modifier = Modifier.padding(vertical = 8.dp)) {
-        Text("Position $positionNumber", style = MaterialTheme.typography.labelMedium)
-        Spacer(Modifier.height(4.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ChargingSpeed.values().forEach {
-                FilterChip(
-                    selected = speed == it,
-                    onClick = { onSpeedChange(it) },
-                    label = { Text(it.name) }
-                )
-            }
-        }
-    }
-}*/

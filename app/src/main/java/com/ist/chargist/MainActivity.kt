@@ -23,9 +23,7 @@ class MainActivity : ComponentActivity() {
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        Timber.i("onCreate ssdf")
         super.onCreate(savedInstanceState)
-        Timber.i("onCreate started")
 
         setContent {
             ChargISTTheme {

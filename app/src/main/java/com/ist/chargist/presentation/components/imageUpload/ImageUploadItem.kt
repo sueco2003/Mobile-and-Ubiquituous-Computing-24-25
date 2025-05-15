@@ -1,4 +1,3 @@
-/*
 package com.ist.chargist.presentation.components.imageUpload
 
 import android.net.Uri
@@ -34,22 +33,20 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import coil.request.ImageRequest
-import com.hocel.assetmanager.R
 import com.hocel.assetmanager.presentation.components.dashedBorder
-import com.hocel.assetmanager.ui.theme.AssetManagerTheme
-import com.hocel.assetmanager.ui.theme.imageAdd
-import com.hocel.assetmanager.ui.theme.imageAddCenterIcon
-import com.hocel.assetmanager.ui.theme.imageAddCloudIcon
-import com.hocel.assetmanager.ui.theme.imageAddFont
-import com.hocel.assetmanager.utils.createImageUri
+
+import com.ist.chargist.R
 import com.ist.chargist.ui.theme.imageAdd
+import com.ist.chargist.ui.theme.imageAddCenterIcon
+import com.ist.chargist.ui.theme.imageAddCloudIcon
+import com.ist.chargist.ui.theme.imageAddFont
+import com.ist.chargist.utils.AppUtils.createImageUri
 
 @Composable
 fun DocumentUploadItem(
@@ -164,5 +161,3 @@ fun DocumentUploadItem(
         }
     }
 }
-*/
-*/

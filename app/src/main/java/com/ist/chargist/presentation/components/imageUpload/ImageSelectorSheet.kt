@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.ist.chargist.ui.theme.ISTBlue
 import com.ist.chargist.ui.theme.OrangePressed
 
 
@@ -43,7 +44,7 @@ fun ImageSelectorSheet(
             modifier = Modifier
                 .weight(1f)
                 .wrapContentHeight()
-                .background(OrangePressed, shape = RoundedCornerShape(14.dp))
+                .background(ISTBlue, shape = RoundedCornerShape(14.dp))
                 .clip(RoundedCornerShape(14.dp))
                 .clickable(onClick = onSelectCamera)
                 .padding(vertical = 25.dp)
@@ -61,7 +62,7 @@ fun ImageSelectorSheet(
             modifier = Modifier
                 .weight(1f)
                 .wrapContentHeight()
-                .background(OrangePressed, shape = RoundedCornerShape(14.dp))
+                .background(ISTBlue, shape = RoundedCornerShape(14.dp))
                 .clip(RoundedCornerShape(14.dp))
                 .clickable(onClick = onSelectGallery)
                 .padding(vertical = 25.dp)

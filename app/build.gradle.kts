@@ -68,6 +68,7 @@ dependencies {
     implementation(libs.google.firebase.analytics) // Or other Firebase services
     implementation(libs.firebase.database) // Realtime Database
     implementation(libs.firebase.storage)
+    implementation(libs.coil.compose)
 
     // Maps
     implementation(libs.maps.compose) // Latest as of 2025
