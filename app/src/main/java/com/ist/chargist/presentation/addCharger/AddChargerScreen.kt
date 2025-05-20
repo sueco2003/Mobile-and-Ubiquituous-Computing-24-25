@@ -211,15 +211,13 @@ private fun AddChargerContent(
                             lat = lat,
                             lon = lon,
                             payment = selectedMethods,
-                            slowPrice = slowPrice.toFloatOrNull(),
-                            mediumPrice = mediumPrice.toFloatOrNull(),
-                            fastPrice = fastPrice.toFloatOrNull(),
+                            slowPrice = slowPrice.toFloatOrNull() ?: 0.0f,
+                            mediumPrice = mediumPrice.toFloatOrNull() ?: 0.0f,
+                            fastPrice = fastPrice.toFloatOrNull() ?: 0.0f,
                             slotId = emptyList()
                         ),
                         chargers
                     )
-                } else if (slowPrice.toFloatOrNull()!! < 0 || mediumPrice.toFloatOrNull()!! < 0 || fastPrice.toFloatOrNull()!! < 0) {
-                    Toast.makeText(context, "Prices can´t be negative", Toast.LENGTH_SHORT).show()
                 }
                 else {
                     Toast.makeText(context, "Invalid location data", Toast.LENGTH_SHORT).show()
@@ -522,6 +520,14 @@ private fun AddChargerContent(
                             Toast.LENGTH_SHORT
                         ).show()
 
+                        !isValidPriceString(slowPrice) || !isValidPriceString(mediumPrice) || !isValidPriceString(
+                            fastPrice
+                        ) -> Toast.makeText(
+                            context,
+                            "Prices need to be positive numbers",
+                            Toast.LENGTH_SHORT
+                        ).show()
+
                         else -> {
                             viewModel.searchLocation(
                                 query = searchQuery,
@@ -562,6 +568,12 @@ private fun AddChargerContent(
             }
         )
     }
+}
+
+private fun isValidPriceString(priceString: String): Boolean {
+    if (priceString.isBlank()) return true; // no price provided is valid
+    val price = priceString.toFloatOrNull()
+    return price != null && price >= 0
 }
 
 // Extension for toggling strings in a set

@@ -11,8 +11,8 @@ data class ChargerStation(
     val lon: Float,
     val payment: List<String>,
     val imageUri: String?,
-    val slowPrice: Float?,
-    val mediumPrice: Float?,
-    val fastPrice: Float?,
+    val slowPrice: Float,
+    val mediumPrice: Float,
+    val fastPrice: Float,
     val slotId: List<String>,
 ) : Parcelable

@@ -6,15 +6,14 @@ import java.util.UUID
 data class ChargerStationDtoFirebase(
     val id: String = "",
     val name: String = "",
-    val lat : Float = 0.0.toFloat(),
-    val lon : Float = 0.0.toFloat(),
+    val lat : Float = 0.0f,
+    val lon : Float = 0.0f,
     val payment : List<String> = emptyList(),
     val imageUri : String = "",
-    val slowPrice : Float = 0.toFloat(),
-    val mediumPrice : Float = 0.toFloat(),
-    val fastPrice : Float = 0.toFloat(),
+    val slowPrice : Float = 0.0f,
+    val mediumPrice : Float = 0.0f,
+    val fastPrice : Float = 0.0f,
     var slotsId : List<String> = emptyList()
-
 )
 
 fun ChargerStation.toChargerStationDtoFirebase() = ChargerStationDtoFirebase(
@@ -23,7 +22,10 @@ fun ChargerStation.toChargerStationDtoFirebase() = ChargerStationDtoFirebase(
     lat = this.lat,
     lon = this.lon,
     payment = this.payment,
-    imageUri = this.imageUri.toString()
+    imageUri = this.imageUri.toString(),
+    slowPrice = this.slowPrice,
+    mediumPrice = this.mediumPrice,
+    fastPrice = this.fastPrice
 )
 
 fun ChargerStationDtoFirebase.toChargerStation() = ChargerStation(
