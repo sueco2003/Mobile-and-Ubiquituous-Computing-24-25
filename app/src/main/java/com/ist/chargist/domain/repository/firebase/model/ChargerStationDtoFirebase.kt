@@ -2,15 +2,19 @@ package com.ist.chargist.domain.repository.firebase.model
 
 import com.ist.chargist.domain.model.ChargerStation
 import java.util.UUID
-import kotlin.toString
 
 data class ChargerStationDtoFirebase(
     val id: String = "",
     val name: String = "",
     val lat : Float = 0.0.toFloat(),
     val lon : Float = 0.0.toFloat(),
-    val payment : String = "",
-    val imageUri : String = ""
+    val payment : List<String> = emptyList(),
+    val imageUri : String = "",
+    val slowPrice : Float = 0.toFloat(),
+    val mediumPrice : Float = 0.toFloat(),
+    val fastPrice : Float = 0.toFloat(),
+    var slotsId : List<String> = emptyList()
+
 )
 
 fun ChargerStation.toChargerStationDtoFirebase() = ChargerStationDtoFirebase(
@@ -18,7 +22,7 @@ fun ChargerStation.toChargerStationDtoFirebase() = ChargerStationDtoFirebase(
     name = this.name.toString(),
     lat = this.lat,
     lon = this.lon,
-    payment = this.payment.toString(),
+    payment = this.payment,
     imageUri = this.imageUri.toString()
 )
 
@@ -28,5 +32,9 @@ fun ChargerStationDtoFirebase.toChargerStation() = ChargerStation(
     lat = this.lat,
     lon = this.lon,
     payment = this.payment,
-    imageUri = this.imageUri
+    imageUri = this.imageUri,
+    slowPrice = this.slowPrice,
+    mediumPrice = this.mediumPrice,
+    fastPrice = this.fastPrice,
+    slotId = this.slotsId
 )

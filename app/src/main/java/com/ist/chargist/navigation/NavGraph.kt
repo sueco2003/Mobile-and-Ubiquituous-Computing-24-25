@@ -80,7 +80,7 @@ fun SetupNavGraph(
         )
         mapLocationPicker(
             navigateBack = {
-                navController.navigateUp()
+                navController.popBackStack()
             },
             onLocationSelected = { latLng ->
                 navController.previousBackStackEntry
@@ -173,9 +173,6 @@ fun NavGraphBuilder.addChargerStationRoute(
         val viewModel: AddChargerViewModel = hiltViewModel()
         AddChargerScreen(viewModel = viewModel,
             navigateBack = navigateBack,
-            onSaveClicked = { charger ->
-                viewModel.createCharger(charger)
-            },
             navigateToMapLocationPicker = navigateToMapLocationPicker,
             navController = navController)
     }

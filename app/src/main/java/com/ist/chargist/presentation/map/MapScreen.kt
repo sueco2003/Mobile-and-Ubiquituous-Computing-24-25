@@ -1,14 +1,16 @@
 package com.ist.chargist.presentation.map
 
 
+import ChargerStationPanel
 import android.Manifest
 import android.app.Activity
-import android.content.Context
 import android.content.pm.PackageManager
-import android.location.LocationManager
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,8 +20,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -36,7 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat
+import androidx.compose.ui.window.Popup
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -44,11 +44,9 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
-import com.google.maps.android.ktx.model.cameraPosition
 import com.ist.chargist.domain.model.ChargerStation
 import com.ist.chargist.utils.UiState
 
@@ -65,6 +63,15 @@ fun MapScreen(
     val cameraPosition by viewModel.cameraPosition.collectAsState()
     val forceUpdate by viewModel.locationUpdates.collectAsState()
     val activity = context as Activity
+
+
+
+
+
+    var selectedStation by remember { mutableStateOf<ChargerStation?>(null) }
+    var showPanel by remember { mutableStateOf(false) }
+
+
 
     // Permission launcher
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -114,6 +121,7 @@ fun MapScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraState
@@ -129,7 +137,9 @@ fun MapScreen(
                             title = station.name,
                             icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
                             onClick = {
-                                onChargerStationClick?.invoke(station)
+                                Log.d("MapScreen", "Marker clicked: ${station.name}")
+                                selectedStation = station
+                                showPanel = true
                                 false
                             }
                         )
@@ -165,6 +175,39 @@ fun MapScreen(
             onActiveChange = {},
             placeholder = { Text("Search location...") }
         ) {}
+
+
+        if (showPanel && selectedStation != null) {
+            Popup(alignment = Alignment.Center) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        // Transparent clickable background to detect outside clicks
+                        .clickable(
+                            onClick = {
+                                showPanel = false
+                                selectedStation = null
+                            },
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        )
+                ) {
+                    // The panel itself - stop click events from propagating outside
+                    Box(
+                        Modifier
+                            .align(Alignment.Center)
+                            .clickable(enabled = false) {} // consume clicks so they don't dismiss the popup
+                    ) {
+                        ChargerStationPanel(
+                            station = selectedStation!!,
+                            viewModel = viewModel,
+                            onDismiss = { selectedStation = null }
+                        )
+                    }
+                }
+            }
+        }
+
 
         Column(
             modifier = Modifier

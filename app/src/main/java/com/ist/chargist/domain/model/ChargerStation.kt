@@ -7,8 +7,12 @@ import kotlinx.parcelize.Parcelize
 data class ChargerStation(
     val id: String = "",
     val name: String,
-    val lat : Float,
-    val lon : Float,
-    val payment : String,
-    val imageUri: String?
+    val lat: Float,
+    val lon: Float,
+    val payment: List<String>,
+    val imageUri: String?,
+    val slowPrice: Float?,
+    val mediumPrice: Float?,
+    val fastPrice: Float?,
+    val slotId: List<String>,
 ) : Parcelable

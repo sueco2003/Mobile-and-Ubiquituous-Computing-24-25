@@ -9,14 +9,17 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.maps.model.LatLng
 import com.ist.chargist.domain.DatabaseRepository
 import com.ist.chargist.domain.ImageRepository
+import com.ist.chargist.domain.model.ChargerSlot
 import com.ist.chargist.domain.model.ChargerStation
 import com.ist.chargist.utils.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
@@ -38,10 +41,11 @@ class AddChargerViewModel @Inject constructor(
     var onSelectCamera: (() -> Unit)? = null
     var onSelectGallery: (() -> Unit)? = null
 
-    fun createCharger(station: ChargerStation) {
+    fun createCharger(station: ChargerStation, slots: List<ChargerSlot>) {
         viewModelScope.launch {
             _creatingCharger.value = UiState.Loading
-            dbRepo.createOrUpdateChargerStation(station)
+
+            dbRepo.createOrUpdateChargerStation(station, slots)
                 .onSuccess { createdChargerList ->
                     createdChargerList.map { stationToInsert ->
                         if (station.imageUri == null) {
@@ -55,7 +59,8 @@ class AddChargerViewModel @Inject constructor(
                             referenceId = station.id
                         ).onSuccess { imageUrl ->
                             dbRepo.createOrUpdateChargerStation(
-                                stationToInsert.copy(imageUri = imageUrl)
+                                stationToInsert.copy(imageUri = imageUrl),
+                                emptyList()
                             )
                                 .onSuccess {
                                     _creatingCharger.value = UiState.Success(it)
@@ -73,17 +78,28 @@ class AddChargerViewModel @Inject constructor(
         }
     }
 
-    fun searchLocation(query: String, context: Context) {
+    fun searchLocation(
+        query: String,
+        context: Context,
+    ) {
         viewModelScope.launch {
             _chargerLocation.value = UiState.Loading
             try {
-                val geocoder = Geocoder(context)
-                val addresses = geocoder.getFromLocationName(query, 1)
+                if (!Geocoder.isPresent()) {
+                    _chargerLocation.value = UiState.Error("Geocoder not available on this device")
+                    return@launch
+                }
+
+                val geocoder = Geocoder(context, Locale.getDefault())
+                val addresses = withContext(Dispatchers.IO) {
+                    geocoder.getFromLocationName(query, 1)
+                }
                 val address = addresses?.firstOrNull()
 
                 if (address != null) {
-                    _chargerLocation.value =
-                        UiState.Success(listOf(address.latitude.toString(), address.longitude.toString()))
+                    val lat = address.latitude.toString()
+                    val lon = address.longitude.toString()
+                    _chargerLocation.value = UiState.Success(listOf(lat, lon))
                 } else {
                     _chargerLocation.value = UiState.Error("Location not found")
                 }
@@ -93,6 +109,7 @@ class AddChargerViewModel @Inject constructor(
             }
         }
     }
+
 
     fun getCurrentLocation() {
         viewModelScope.launch {

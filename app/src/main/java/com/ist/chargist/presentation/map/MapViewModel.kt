@@ -11,6 +11,7 @@ import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.maps.model.LatLng
 import com.ist.chargist.domain.AuthenticationRepository
 import com.ist.chargist.domain.DatabaseRepository
+import com.ist.chargist.domain.model.ChargerSlot
 import com.ist.chargist.utils.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import timber.log.Timber
 import javax.inject.Inject
 
 @HiltViewModel
@@ -34,6 +36,9 @@ class MapViewModel @Inject constructor(
 
     private val _cameraPosition = MutableStateFlow<LatLng?>(null)
     val cameraPosition = _cameraPosition.asStateFlow()
+
+    private val _slotLocation = mutableStateOf<UiState>(UiState.Idle)
+    val slotLocation: State<UiState> get() = _slotLocation
 
     private val _errors = MutableSharedFlow<String>()
     val errors = _errors.asSharedFlow()
@@ -59,6 +64,23 @@ class MapViewModel @Inject constructor(
                     }
             } catch (e: Exception) {
                 _chargerStationList.value = UiState.Fail(e.message ?: "Loading failed")
+            }
+        }
+    }
+
+    fun getSlotsForStation(stationId: String) {
+        viewModelScope.launch {
+            _slotLocation.value = UiState.Loading
+            try {
+                dbRepo.getSlotsForStation(stationId)
+                    .onSuccess {
+                        _slotLocation.value = UiState.Success(it)
+                    }
+                    .onFailure {
+                        _slotLocation.value = UiState.Fail(it.message ?: "Unknown error")
+                    }
+            } catch (e: Exception) {
+                _slotLocation.value = UiState.Fail(e.message ?: "Loading failed")
             }
         }
     }
@@ -93,4 +115,41 @@ class MapViewModel @Inject constructor(
     fun signOutUser() {
         authRepo.signOutUser()
     }
+
+    fun updateSlots(slots: List<ChargerSlot>) {
+        viewModelScope.launch {
+            var hasError = false
+            val errorMessages = mutableListOf<String>()
+
+            slots.forEach { slot ->
+                val result = dbRepo.createOrUpdateChargerSlot(slot.stationId, slot)
+                if (result.isFailure) {
+                    hasError = true
+                    errorMessages.add(result.exceptionOrNull()?.message ?: "Unknown error")
+                }
+            }
+
+            if (hasError) {
+                val combinedMessage = errorMessages.joinToString(separator = "\n")
+                Timber.e("Failed to update some slots: $combinedMessage")
+            } else {
+                Timber.i("All slots updated successfully")
+                // Optionally emit success event
+                //_uiEvent.emit("Slots updated successfully")
+            }
+        }
+    }
+
+    fun reportProblem(slotId: String) {
+        viewModelScope.launch {
+            val result = dbRepo.reportDamagedSlot(slotId)
+            result.onSuccess {
+                // Optionally: update UI state or show success message
+            }.onFailure { throwable ->
+                // Optionally: update UI state or show error message
+                Timber.e(throwable)
+            }
+        }
+    }
+
 }

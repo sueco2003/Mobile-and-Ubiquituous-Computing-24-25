@@ -73,7 +73,7 @@ class FirebaseStorageImpl @Inject constructor() : ImageRepository {
             return defaultImage
         }
 
-        val newDefaultImage = R.drawable.img_defaul_bg_charger
+        val newDefaultImage = R.drawable.img_default_bg_charger
         defaultImageMapper[id] = newDefaultImage
         return newDefaultImage
     }

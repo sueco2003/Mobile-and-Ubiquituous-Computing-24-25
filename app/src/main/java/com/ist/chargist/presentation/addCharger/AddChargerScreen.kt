@@ -8,15 +8,22 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -25,15 +32,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.foundation.layout.Box
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Map
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
-
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -49,14 +51,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.LatLng
-
 import com.ist.chargist.R
+import com.ist.chargist.domain.model.ChargeSpeed
+import com.ist.chargist.domain.model.ChargerSlot
 import com.ist.chargist.domain.model.ChargerStation
+import com.ist.chargist.domain.model.Connector
 import com.ist.chargist.presentation.components.AddChargerDialog
 import com.ist.chargist.presentation.components.PaymentMethodButton
 import com.ist.chargist.presentation.components.imageUpload.DocumentUploadItem
@@ -72,8 +76,7 @@ fun AddChargerScreen(
     viewModel: AddChargerViewModel,
     navigateToMapLocationPicker: () -> Unit,
     navigateBack: () -> Unit,
-    navController: NavController,
-    onSaveClicked: (ChargerStation) -> Unit
+    navController: NavController
 ) {
     val context = LocalContext.current
     var cameraPermissionGranted by remember { mutableStateOf(false) }
@@ -94,51 +97,51 @@ fun AddChargerScreen(
     val creatingDocumentUiState by viewModel.creatingCharger
     Scaffold(
         topBar = {
-            TopAppBar(navigationIcon = {
-                IconButton(onClick = navigateBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.btn_back_arrow_content_description)
-                    )
-                }
-            }, title = {
-                Text(
-                    text = stringResource(R.string.location_add_title),
-                    fontWeight = FontWeight.Bold
-                )
-
-            }, colors = TopAppBarDefaults.topAppBarColors(containerColor = BackgroundColor)
-            )
-        }) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .padding(top = paddingValues.calculateTopPadding())
-                .background(BackgroundColor)
-                .fillMaxSize()
-        ) {
-            AddChargerContent(
-                modifier = Modifier.fillMaxSize(),
-                viewModel = viewModel,
-                navController = navController,
-                creatingDocumentUiState = creatingDocumentUiState,
-                onSelectCamera = {
-                    if (!cameraPermissionGranted) {
-                        requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                    } else {
-                        viewModel.onSelectCamera?.invoke()
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = navigateBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.btn_back_arrow_content_description)
+                        )
                     }
                 },
-                onSelectGallery = {
-                    viewModel.onSelectGallery?.invoke()
+                title = {
+                    Text(
+                        text = stringResource(R.string.location_add_title),
+                        fontWeight = FontWeight.Bold
+                    )
                 },
-                navigateBack = navigateBack,
-                navigateToMapLocationPicker = navigateToMapLocationPicker,
-                onSaveClicked = {
-                    onSaveClicked(it)
-                }
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = BackgroundColor)
             )
         }
+    ) { paddingValues ->
+        // Let AddChargerContent manage its own scrolling
+        AddChargerContent(
+            modifier = Modifier
+                .padding(paddingValues)
+                .fillMaxSize()
+                .background(BackgroundColor),
+            viewModel = viewModel,
+            navController = navController,
+            creatingDocumentUiState = creatingDocumentUiState,
+            onSelectCamera = {
+                if (!cameraPermissionGranted) {
+                    requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                } else {
+                    viewModel.onSelectCamera?.invoke()
+                }
+            },
+            onSelectGallery = {
+                viewModel.onSelectGallery?.invoke()
+            },
+            navigateBack = navigateBack,
+            navigateToMapLocationPicker = navigateToMapLocationPicker
+        )
     }
+
+
+
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -152,16 +155,21 @@ private fun AddChargerContent(
     navigateBack: () -> Unit,
     navController: NavController,
     navigateToMapLocationPicker: () -> Unit,
-    onSaveClicked: (ChargerStation) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
-    var selectedMethod by remember { mutableStateOf<String?>("credit") }
+    var selectedMethods by remember { mutableStateOf<List<String>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
     var showBottomSheet by remember { mutableStateOf(false) }
     var showDialog by remember { mutableStateOf(false) }
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     val chargerLocationState = viewModel.chargerLocation
     val myLocationState = viewModel.myLocation
+
+    var chargers by remember { mutableStateOf(listOf<ChargerSlot>()) }
+
+    var fastPrice by remember { mutableStateOf("") }
+    var mediumPrice by remember { mutableStateOf("") }
+    var slowPrice by remember { mutableStateOf("") }
 
     val selectedLocation = navController
         .currentBackStackEntry
@@ -196,16 +204,24 @@ private fun AddChargerContent(
                 val lon = locationStrings?.getOrNull(1)?.toFloatOrNull()
 
                 if (lat != null && lon != null) {
-                    onSaveClicked(
+                    viewModel.createCharger(
                         ChargerStation(
                             name = name.trim(),
                             imageUri = imageUri?.toString(),
                             lat = lat,
                             lon = lon,
-                            payment = selectedMethod.toString()
-                        )
+                            payment = selectedMethods,
+                            slowPrice = slowPrice.toFloatOrNull(),
+                            mediumPrice = mediumPrice.toFloatOrNull(),
+                            fastPrice = fastPrice.toFloatOrNull(),
+                            slotId = emptyList()
+                        ),
+                        chargers
                     )
-                } else {
+                } else if (slowPrice.toFloatOrNull()!! < 0 || mediumPrice.toFloatOrNull()!! < 0 || fastPrice.toFloatOrNull()!! < 0) {
+                    Toast.makeText(context, "Prices can´t be negative", Toast.LENGTH_SHORT).show()
+                }
+                else {
                     Toast.makeText(context, "Invalid location data", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -234,17 +250,20 @@ private fun AddChargerContent(
     }
 
 
-    Column(
+    LazyColumn(
         modifier = modifier
-            .padding(16.dp)
+            .fillMaxSize()
+            .background(BackgroundColor)
+            .padding(16.dp),
+        contentPadding = PaddingValues(bottom = 100.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Column(Modifier.weight(9f)) {
-            Spacer(modifier = Modifier.height(16.dp))
+        item {
             DocumentUploadItem(
-                onClick = { onSelectGallery, onSelectCamera ->
+                onClick = { selectGallery, selectCamera ->
                     showBottomSheet = true
-                    viewModel.onSelectCamera = onSelectCamera
-                    viewModel.onSelectGallery = onSelectGallery
+                    viewModel.onSelectGallery = selectGallery
+                    viewModel.onSelectCamera = selectCamera
                 },
                 onImageChosen = {
                     showBottomSheet = false
@@ -252,12 +271,12 @@ private fun AddChargerContent(
                 },
                 imageUriSaved = imageUri
             )
-            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        item {
             OutlinedTextField(
                 value = name,
-                onValueChange = {
-                    name = it
-                },
+                onValueChange = { name = it },
                 label = {
                     Text(
                         text = stringResource(R.string.charger_name_label_hint),
@@ -267,14 +286,12 @@ private fun AddChargerContent(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp)
             )
+        }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
+        item {
             OutlinedTextField(
                 value = searchQuery,
-                onValueChange = {
-                    searchQuery = it
-                },
+                onValueChange = { searchQuery = it },
                 label = {
                     Text(
                         text = stringResource(R.string.address_label_hint),
@@ -284,27 +301,30 @@ private fun AddChargerContent(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp)
             )
-            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        item {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Button(
                     onClick = { viewModel.getCurrentLocation() },
-                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.LocationOn,
                         contentDescription = "Location"
                     )
                 }
-
                 Button(
-                    onClick = { navigateToMapLocationPicker() },
-                    modifier = Modifier.weight(1f).padding(start = 8.dp)
+                    onClick = navigateToMapLocationPicker,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 8.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Map,
@@ -312,111 +332,229 @@ private fun AddChargerContent(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
-            Box(
+        }
+
+        item {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .background(Color(0xFFF0F0F0), RoundedCornerShape(16.dp))
                     .padding(16.dp)
-                    .background(
-                        color = Color(0xFFF0F0F0), // Light gray background
-                        shape = RoundedCornerShape(16.dp)
-                    )
-                    .padding(16.dp) // Inner padding
             ) {
-                Column(
+                Text(
+                    text = "Payment System",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    PaymentMethodButton(
+                        label = "Credit Card",
+                        isSelected = "credit" in selectedMethods,
+                        onClick = {
+                            selectedMethods = selectedMethods.toggle("credit")
+                        }
+                    )
+                    PaymentMethodButton(
+                        label = "PayPal",
+                        isSelected = "paypal" in selectedMethods,
+                        onClick = {
+                            selectedMethods = selectedMethods.toggle("paypal")
+                        }
+                    )
+                    PaymentMethodButton(
+                        label = "Cash",
+                        isSelected = "cash" in selectedMethods,
+                        onClick = {
+                            selectedMethods = selectedMethods.toggle("cash")
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Prices",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = fastPrice,
+                        onValueChange = { fastPrice = it },
+                        label = { Text("Fast") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    OutlinedTextField(
+                        value = mediumPrice,
+                        onValueChange = { mediumPrice = it },
+                        label = { Text("Medium") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    OutlinedTextField(
+                        value = slowPrice,
+                        onValueChange = { slowPrice = it },
+                        label = { Text("Slow") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "Payment System",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
+                    Text("Slots", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    IconButton(onClick = {
+                        chargers = chargers + ChargerSlot(
+                            speed = ChargeSpeed.F,
+                            connector = Connector.CCS2,
+                            available = true
+                        )
+                    }) {
+                        Icon(Icons.Default.Add, contentDescription = "Add Charger")
+                    }
+                }
+
+                chargers.forEachIndexed { index, charger ->
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        PaymentMethodButton(
-                            label = "Credit Card",
-                            isSelected = selectedMethod == "credit",
-                            onClick = { selectedMethod = "credit" }
+                        Text(
+                            text = "Charger ${index + 1}",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.weight(1f)
                         )
+                        IconButton(
+                            onClick = {
+                                chargers = chargers.toMutableList().also { it.removeAt(index) }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Remove Charger"
+                            )
+                        }
+                    }
 
-                        PaymentMethodButton(
-                            label = "PayPal",
-                            isSelected = selectedMethod == "paypal",
-                            onClick = { selectedMethod = "paypal" }
-                        )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text("Charge Speed", style = MaterialTheme.typography.labelMedium)
+                    Row {
+                        ChargeSpeed.entries.forEach { speed ->
+                            val selected = speed == charger.speed
+                            OutlinedButton(
+                                onClick = {
+                                    chargers = chargers.mapIndexed { i, c ->
+                                        if (i == index) c.copy(speed = speed) else c
+                                    }
+                                },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (selected)
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                    else Color.Transparent
+                                ),
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Text(speed.name)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text("Connector", style = MaterialTheme.typography.labelMedium)
+                    Row {
+                        Connector.entries.forEach { conn ->
+                            val selected = conn == charger.connector
+                            OutlinedButton(
+                                onClick = {
+                                    chargers = chargers.mapIndexed { i, c ->
+                                        if (i == index) c.copy(connector = conn) else c
+                                    }
+                                },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (selected)
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                    else Color.Transparent
+                                ),
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Text(conn.name)
+                            }
+                        }
                     }
                 }
             }
         }
 
-        Column(Modifier.weight(1f)) {
+        item {
             Button(
                 onClick = {
                     when {
-                        name.isEmpty() -> Toast.makeText(
+                        name.isBlank() -> Toast.makeText(
                             context,
                             context.getString(R.string.error_input_cannot_be_empty),
                             Toast.LENGTH_SHORT
                         ).show()
 
-                        searchQuery.isEmpty() -> Toast.makeText(
+                        searchQuery.isBlank() -> Toast.makeText(
                             context,
                             "Search query cannot be empty",
                             Toast.LENGTH_SHORT
                         ).show()
 
                         else -> {
-                            viewModel.searchLocation(searchQuery, context)
+                            viewModel.searchLocation(
+                                query = searchQuery,
+                                context = context
+                            )
                         }
                     }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                colors = ButtonDefaults.buttonColors().copy(containerColor = ISTBlue),
+                colors = ButtonDefaults.buttonColors(containerColor = ISTBlue),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 when (creatingDocumentUiState) {
-                    UiState.Loading -> {
-                        CircularProgressIndicator()
-                    }
-
+                    UiState.Loading -> CircularProgressIndicator()
                     is UiState.Error -> {
-                        Toast.makeText(
-                            context,
-                            creatingDocumentUiState.message,
-                            Toast.LENGTH_SHORT
-                        ).show()
-
-                        Text(
-                            text = stringResource(R.string.btn_add_location_button_label),
-                            fontSize = 16.sp,
-                            color = Color.White
-                        )
+                        Toast.makeText(context, creatingDocumentUiState.message, Toast.LENGTH_SHORT).show()
+                        Text(stringResource(R.string.btn_add_location_button_label), fontSize = 16.sp, color = Color.White)
                     }
                     is UiState.Fail,
-                    UiState.Idle ->{
-                        Text(
-                            text = stringResource(R.string.btn_add_location_button_label),
-                            fontSize = 16.sp,
-                            color = Color.White
-                        )
+                    UiState.Idle -> {
+                        Text(stringResource(R.string.btn_add_location_button_label), fontSize = 16.sp, color = Color.White)
                     }
                     is UiState.Success -> {
                         showDialog = true
-                        Text(
-                            text = stringResource(R.string.btn_add_location_button_label),
-                            fontSize = 16.sp,
-                            color = Color.White
-                        )
+                        Text(stringResource(R.string.btn_add_location_button_label), fontSize = 16.sp, color = Color.White)
                     }
                 }
             }
         }
     }
+
     if (showDialog) {
         AddChargerDialog(
             navigateBack = {
@@ -425,4 +563,8 @@ private fun AddChargerContent(
         )
     }
 }
+
+// Extension for toggling strings in a set
+private fun List<String>.toggle(item: String): List<String> =
+    if (item in this) this - item else this + item
 
