@@ -156,17 +156,19 @@ private fun AddChargerContent(
     navController: NavController,
     navigateToMapLocationPicker: () -> Unit,
 ) {
-    var name by remember { mutableStateOf("") }
-    var selectedMethods by remember { mutableStateOf<List<String>>(emptyList()) }
+
+
     var searchQuery by remember { mutableStateOf("") }
     var showBottomSheet by remember { mutableStateOf(false) }
     var showDialog by remember { mutableStateOf(false) }
-    var imageUri by remember { mutableStateOf<Uri?>(null) }
+
     val chargerLocationState = viewModel.chargerLocation
     val myLocationState = viewModel.myLocation
 
+    var name by remember { mutableStateOf("") }
+    var selectedMethods by remember { mutableStateOf<List<String>>(emptyList()) }
     var chargers by remember { mutableStateOf(listOf<ChargerSlot>()) }
-
+    var imageUri by remember { mutableStateOf<Uri?>(null) }
     var fastPrice by remember { mutableStateOf("") }
     var mediumPrice by remember { mutableStateOf("") }
     var slowPrice by remember { mutableStateOf("") }

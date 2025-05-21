@@ -2,9 +2,12 @@ package com.ist.chargist.presentation.addCharger
 
 import android.content.Context
 import android.location.Geocoder
+import android.net.Uri
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -40,6 +43,14 @@ class AddChargerViewModel @Inject constructor(
 
     var onSelectCamera: (() -> Unit)? = null
     var onSelectGallery: (() -> Unit)? = null
+
+    var name by mutableStateOf("")
+    var selectedMethods by mutableStateOf<List<String>>(emptyList())
+    var chargers by mutableStateOf(listOf<ChargerSlot>())
+    var imageUri by mutableStateOf<Uri?>(null)
+    var fastPrice by mutableStateOf("")
+    var mediumPrice by mutableStateOf("")
+    var slowPrice by mutableStateOf("")
 
     fun createCharger(station: ChargerStation, slots: List<ChargerSlot>) {
         viewModelScope.launch {

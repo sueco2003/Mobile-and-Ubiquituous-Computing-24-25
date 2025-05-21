@@ -2,7 +2,6 @@ package com.ist.chargist.domain.repository.firebase
 
 
 
-import androidx.compose.ui.platform.LocalContext
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -11,7 +10,6 @@ import com.ist.chargist.domain.AuthenticationRepository
 import com.ist.chargist.domain.DeviceInfoProvider
 import com.ist.chargist.domain.model.User
 import kotlinx.coroutines.tasks.await
-import timber.log.Timber
 import javax.inject.Inject
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -122,7 +120,7 @@ class FirebaseAuthImpl @Inject constructor(
         val newUser = user?.let {
             User(
                 userId = it.uid,
-                username = it.displayName ?: "Unknown",
+                userEmail = it.email ?: "Unknown",
                 favourites = emptyList()// Provide default value if displayName is null
             )
         } ?: return Result.failure(Throwable(ERROR_INVALID_USER))

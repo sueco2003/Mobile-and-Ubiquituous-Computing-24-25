@@ -10,6 +10,10 @@ interface DatabaseRepository {
     suspend fun createOrUpdateChargerSlot(stationId: String, slot: ChargerSlot) : Result<String>
     suspend fun getSlotsForStation(stationId: String) : Result<List<ChargerSlot>>
     suspend fun reportDamagedSlot(slotId: String): Result<Unit>
+    suspend fun toggleFavorite(userId: String, stationId: String): Result<Unit>
+    suspend fun getFavorites(userId: String): Result<List<String>>
+    suspend fun getUserId(): Result<String>
+
 
 
 }

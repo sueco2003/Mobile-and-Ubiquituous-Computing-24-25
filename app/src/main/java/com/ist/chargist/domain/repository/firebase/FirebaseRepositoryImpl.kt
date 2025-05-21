@@ -1,6 +1,7 @@
 package com.ist.chargist.domain.repository.firebase
 
 import com.google.firebase.Firebase
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.firestore
 import com.hocel.assetmanager.utils.DispatcherProvider
 import com.ist.chargist.domain.DatabaseRepository
@@ -192,4 +193,70 @@ class FirebaseRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun toggleFavorite(userId: String, stationId: String): Result<Unit> {
+        if (!deviceInfo.hasInternetConnection()) {
+            return Result.failure(Throwable(ERROR_NO_INTERNET))
+        }
+
+        return try {
+            suspendCoroutine { continuation ->
+
+                val userDocRef = Firebase.firestore.collection("users").document(userId)
+
+                userDocRef.get()
+                    .addOnSuccessListener { snapshot ->
+                        val favorites = snapshot.get("favourites") as? List<String> ?: emptyList()
+                        val updateValue = if (favorites.contains(stationId)) {
+                            FieldValue.arrayRemove(stationId)
+                        } else {
+                            FieldValue.arrayUnion(stationId)
+                        }
+
+                        userDocRef.update("favourites", updateValue)
+                            .addOnSuccessListener {
+                                continuation.resume(Result.success(Unit))
+                            }
+                            .addOnFailureListener {
+                                continuation.resume(Result.failure(it))
+                            }
+                    }
+                    .addOnFailureListener {
+                        continuation.resume(Result.failure(it))
+                    }
+            }
+        } catch (e: Exception) {
+            Timber.e(e)
+            Result.failure(e)
+        }
+    }
+
+
+    override suspend fun getFavorites(userId: String): Result<List<String>> {
+        if (!deviceInfo.hasInternetConnection()) {
+            return Result.failure(Throwable(ERROR_NO_INTERNET))
+        }
+
+        return try {
+            suspendCoroutine { continuation ->
+                Firebase.firestore.collection("users")
+                    .document(userId)
+                    .get()
+                    .addOnSuccessListener { document ->
+                        val favs = document.get("favourites") as? List<String> ?: emptyList()
+                        continuation.resume(Result.success(favs))
+                    }
+                    .addOnFailureListener {
+                        continuation.resume(Result.failure(it))
+                    }
+            }
+        } catch (e: Exception) {
+            Timber.e(e)
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getUserId(): Result<String> {
+        TODO("Not yet implemented")
+    }
 }
+

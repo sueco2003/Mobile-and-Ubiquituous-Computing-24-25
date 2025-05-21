@@ -1,11 +1,9 @@
 package com.ist.chargist.presentation.map
 
 
-import ChargerStationPanel
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,27 +12,45 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SearchBar
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.core.content.ContextCompat
@@ -48,6 +64,8 @@ import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.ist.chargist.domain.model.ChargerStation
+import com.ist.chargist.presentation.components.ChargerStationPanel
+import com.ist.chargist.presentation.components.FilterSortDialog
 import com.ist.chargist.utils.UiState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,7 +82,14 @@ fun MapScreen(
     val forceUpdate by viewModel.locationUpdates.collectAsState()
     val activity = context as Activity
 
+    val favoriteIds by viewModel.favouriteStationIds
 
+
+    var searchQuery by remember { mutableStateOf("") }
+
+    LaunchedEffect(searchQuery) {
+        viewModel.handleSearchInput(searchQuery)
+    }
 
 
 
@@ -130,14 +155,15 @@ fun MapScreen(
             when (chargerStationsUiState) {
                 is UiState.Success -> {
                     ((chargerStationsUiState as? UiState.Success)?.data as? List<ChargerStation>)?.forEach { station ->
+                        val isFavorite = ((favoriteIds as? UiState.Success)?.data as? List<String>?)?.contains(station.id) == true
+                        val hue = if (isFavorite) BitmapDescriptorFactory.HUE_YELLOW else BitmapDescriptorFactory.HUE_RED
+
                         Marker(
                             state = MarkerState(
                                 position = LatLng(station.lat.toDouble(), station.lon.toDouble())
                             ),
-                            title = station.name,
-                            icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
+                            icon = BitmapDescriptorFactory.defaultMarker(hue),
                             onClick = {
-                                Log.d("MapScreen", "Marker clicked: ${station.name}")
                                 selectedStation = station
                                 showPanel = true
                                 false
@@ -162,19 +188,76 @@ fun MapScreen(
             }
         }
 
-        // Search Bar
-        var searchQuery by remember { mutableStateOf("") }
-        SearchBar(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(16.dp),
-            query = searchQuery,
-            onQueryChange = { searchQuery = it },
-            onSearch = { viewModel.searchLocation(it, context) },
-            active = false,
-            onActiveChange = {},
-            placeholder = { Text("Search location...") }
-        ) {}
+        Column(
+            modifier = Modifier.align(Alignment.TopCenter)
+        ) {
+            var showFilterDialog by remember { mutableStateOf(false) }
+            val filterOptions = remember { mutableStateListOf<String>() }
+            var selectedSort by remember { mutableStateOf("distance") }
+            var sortAscending by remember { mutableStateOf(true) }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SearchBar(
+                    modifier = Modifier.weight(1f),
+                    query = searchQuery,
+                    onQueryChange = {
+                        searchQuery = it
+                    },
+                    onSearch = { viewModel.searchLocation(it, context) },
+                    active = false,
+                    onActiveChange = {},
+                    placeholder = { Text("Search stations or location...") }
+                ) {}
+
+                IconButton(
+                    onClick = { showFilterDialog = true }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FilterList,
+                        contentDescription = "Filter & Sort Stations"
+                    )
+                }
+            }
+
+            // Filter/Sort Dialog
+            if (showFilterDialog) {
+                FilterSortDialog(
+                    currentFilters = filterOptions,
+                    selectedSort = selectedSort,
+                    sortAscending = sortAscending,
+                    onDismiss = { showFilterDialog = false },
+                    onApply = { filters, sort, ascending ->
+                        filterOptions.clear()
+                        filterOptions.addAll(filters)
+                        selectedSort = sort
+                        sortAscending = ascending
+                        viewModel.applyFiltersAndSort(filters, sort, ascending)
+                    }
+                )
+            }
+
+            // Display search results
+            if (viewModel.searchQuery.isNotEmpty()) {
+                StationSearchResults(
+                    stations = viewModel.filteredStations.value, // Access .value here
+                    onStationClick = { station ->
+                        selectedStation = station
+                        showPanel = false
+                        viewModel.moveToStation(station)
+                        searchQuery = ""
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth(0.9f)
+                        .padding(horizontal = 16.dp)
+                )
+            }
+        }
+
 
 
         if (showPanel && selectedStation != null) {
@@ -196,12 +279,19 @@ fun MapScreen(
                     Box(
                         Modifier
                             .align(Alignment.Center)
-                            .clickable(enabled = false) {} // consume clicks so they don't dismiss the popup
+                            .clickable(enabled = false) {}
+
+                            .heightIn(max = 400.dp) // adjust max height as needed
+                            .verticalScroll(rememberScrollState())
                     ) {
+                        val isFavorite = ((favoriteIds as? UiState.Success)?.data as? List<String>?)?.contains(selectedStation!!.id) == true
                         ChargerStationPanel(
                             station = selectedStation!!,
                             viewModel = viewModel,
-                            onDismiss = { selectedStation = null }
+                            isFavorite = isFavorite,
+                            onToggleFavorite = { viewModel.toggleFavorite(selectedStation!!.id) },
+                            onDismiss = {     selectedStation = null
+                                showPanel = false }
                         )
                     }
                 }
@@ -243,4 +333,56 @@ fun MapScreen(
             }
         }
     }
+}
+
+@Composable
+fun StationSearchResults(
+    stations: List<ChargerStation>,
+    onStationClick: (ChargerStation) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        elevation = CardDefaults.cardElevation(4.dp),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        LazyColumn {
+            // Add the count parameter first
+            items(
+                count = stations.size,  // This is the Int parameter
+                key = { index -> stations[index].id }  // Add key for better performance
+            ) { index ->
+                StationSearchItem(stations[index], onStationClick)
+            }
+        }
+    }
+}
+
+@Composable
+fun StationSearchItem(
+    station: ChargerStation,
+    onClick: (ChargerStation) -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick(station) },
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = station.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "${station.fastPrice?.let { "F: €$it " }} " +
+                        "${station.mediumPrice?.let { "M: €$it " }} " +
+                        "${station.slowPrice?.let { "S: €$it " }}",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+    Divider()
 }
