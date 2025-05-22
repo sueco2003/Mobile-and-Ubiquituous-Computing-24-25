@@ -47,7 +47,10 @@ fun FilterSortDialog(
                     "Available Slots" to "available",
                     "Fast Charging (${ChargeSpeed.F.name})" to "fast",
                     "Medium Charging (${ChargeSpeed.M.name})" to "medium",
-                    "Slow Charging (${ChargeSpeed.S.name})" to "slow"
+                    "Slow Charging (${ChargeSpeed.S.name})" to "slow",
+                    "Credit Card" to "credit",
+                    "Cash" to "cash",
+                    "Paypal" to "paypal"
                 ).forEach { (label, key) ->
                     FilterChip(
                         selected = filters.contains(key),
@@ -63,7 +66,6 @@ fun FilterSortDialog(
                 Text("Sort by:", style = MaterialTheme.typography.bodyLarge)
                 listOf(
                     "Price" to "price",
-                    "Fastest Available" to "speed",
                     "Distance" to "distance"
                 ).forEach { (label, key) ->
                     SortingOption(

@@ -255,8 +255,69 @@ class FirebaseRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun getUserId(): Result<String> {
-        TODO("Not yet implemented")
+    override suspend fun getLatestDamageReportTimestamp(slotId: String): Result<Long?> {
+        if (!deviceInfo.hasInternetConnection()) {
+            return Result.failure(Throwable(ERROR_NO_INTERNET))
+        }
+
+        return try {
+            suspendCoroutine { continuation ->
+                Firebase.firestore
+                    .collection("slotReports")
+                    .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .get()
+                    .addOnSuccessListener { snapshot ->
+                        val timestamp = snapshot.documents
+                            .firstOrNull { it.getString("slotId") == slotId }
+                            ?.getLong("timestamp")
+                        continuation.resume(Result.success(timestamp))
+                    }
+                    .addOnFailureListener { exception ->
+                        continuation.resume(Result.failure(exception))
+                    }
+            }
+        } catch (e: Exception) {
+            Timber.e(e)
+            Result.failure(e)
+        }
     }
+
+    override suspend fun fixSlot(slotId: String): Result<Unit> {
+        if (!deviceInfo.hasInternetConnection()) {
+            return Result.failure(Throwable(ERROR_NO_INTERNET))
+        }
+
+        return try {
+            suspendCoroutine { continuation ->
+                Firebase.firestore
+                    .collection("slotReports")
+                    .whereEqualTo("slotId", slotId)
+                    .get()
+                    .addOnSuccessListener { snapshot ->
+                        val batch = Firebase.firestore.batch()
+                        for (document in snapshot.documents) {
+                            batch.delete(document.reference)
+                        }
+
+                        batch.commit()
+                            .addOnSuccessListener {
+                                continuation.resume(Result.success(Unit))
+                            }
+                            .addOnFailureListener { exception ->
+                                continuation.resume(Result.failure(exception))
+                            }
+                    }
+                    .addOnFailureListener { exception ->
+                        continuation.resume(Result.failure(exception))
+                    }
+            }
+        } catch (e: Exception) {
+            Timber.e(e)
+            Result.failure(e)
+        }
+    }
+
+
+
 }
 

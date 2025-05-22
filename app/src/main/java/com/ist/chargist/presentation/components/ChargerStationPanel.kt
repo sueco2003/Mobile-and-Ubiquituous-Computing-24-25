@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
@@ -62,6 +63,9 @@ import com.ist.chargist.domain.model.ChargerStation
 import com.ist.chargist.domain.model.Connector
 import com.ist.chargist.presentation.map.MapViewModel
 import com.ist.chargist.utils.UiState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 
 
@@ -70,6 +74,7 @@ import java.util.UUID
 fun ChargerStationPanel(
     station: ChargerStation,
     viewModel: MapViewModel,
+    isAnonymous: Boolean,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     onDismiss: () -> Unit
@@ -112,7 +117,7 @@ fun ChargerStationPanel(
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            if (station.imageUri != null) {
+            if (!station.imageUri.isNullOrEmpty()) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(station.imageUri.toUri())
@@ -147,13 +152,14 @@ fun ChargerStationPanel(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-
-                IconButton(onClick = onToggleFavorite) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                        contentDescription = if (isFavorite) "Unmark favorite" else "Mark as favorite",
-                        tint = if (isFavorite) Color.Yellow else Color.Gray
-                    )
+                if (!isAnonymous) {
+                    IconButton(onClick = onToggleFavorite) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = if (isFavorite) "Unmark favorite" else "Mark as favorite",
+                            tint = if (isFavorite) Color.Yellow else Color.Gray
+                        )
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(4.dp))
@@ -205,21 +211,22 @@ fun ChargerStationPanel(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            Button(onClick = {
-                val newSlotId = UUID.randomUUID().toString()
-                val newSlot = ChargerSlot(
-                    slotId = newSlotId,
-                    stationId = station.id,
-                    speed = ChargeSpeed.F,
-                    connector = Connector.CCS2,
-                    available = true
-                )
-                newSlots += newSlot
-                pendingSlotUpdates[newSlotId] = newSlot
-            }, modifier = Modifier.fillMaxWidth()) {
-                Text("Add More Chargers", style = MaterialTheme.typography.bodyMedium)
+            if (!isAnonymous) {
+                Button(onClick = {
+                    val newSlotId = UUID.randomUUID().toString()
+                    val newSlot = ChargerSlot(
+                        slotId = newSlotId,
+                        stationId = station.id,
+                        speed = ChargeSpeed.F,
+                        connector = Connector.CCS2,
+                        available = true
+                    )
+                    newSlots += newSlot
+                    pendingSlotUpdates[newSlotId] = newSlot
+                }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Add More Chargers", style = MaterialTheme.typography.bodyMedium)
+                }
             }
-
             Spacer(modifier = Modifier.height(12.dp))
             Text("Available Slots:", style = MaterialTheme.typography.bodyMedium)
 
@@ -245,7 +252,8 @@ fun ChargerStationPanel(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
-                                .clickable { selectedSlot = slot }, // Open popup on click
+                                .clickable { selectedSlot = slot
+                                    viewModel.checkDamageReport(slot.slotId)}, // Open popup on click
                         ) {
                             Column(Modifier.padding(8.dp)) {
                                 Row(
@@ -257,7 +265,13 @@ fun ChargerStationPanel(
                                         style = MaterialTheme.typography.titleSmall,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    IconButton(onClick = { viewModel.reportProblem(slot.slotId) }) {
+                                    IconButton(onClick = {
+                                        // Set slot availability to false locally
+                                        pendingSlotUpdates[slot.slotId] = slot.copy(available = false)
+
+                                        // Trigger ViewModel logic
+                                        viewModel.reportProblems(slot.slotId)
+                                    }) {
                                         Icon(Icons.Default.Warning, contentDescription = "Report")
                                     }
                                     IconButton(onClick = {
@@ -459,6 +473,9 @@ fun ChargerStationPanel(
 // Dialog to show slot details
     selectedSlot?.let { dialogSlot ->
         val currentSlot = pendingSlotUpdates[dialogSlot.slotId] ?: dialogSlot
+        val reportTimestamp = viewModel.damageReports[currentSlot.slotId]
+
+
         AlertDialog(
             onDismissRequest = { selectedSlot = null },
             title = { Text("Slot Details") },
@@ -473,26 +490,58 @@ fun ChargerStationPanel(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
+                        val statusText = when {
+                            currentSlot.available -> "Available"
+                            reportTimestamp != null -> "For maintenance"
+                            else -> "Unavailable"
+                        }
+
+                        val statusColor = when {
+                            currentSlot.available -> Color.Green
+                            reportTimestamp != null -> Color(0xFFFFC107)
+                            else -> Color.Red
+                        }
+
                         Text(
-                            "Status: ${if (currentSlot.available) "Available" else "Unavailable"}",
+                            "Status: $statusText",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = if (currentSlot.available) Color.Green else Color.Red,
+                            color = statusColor,
                             modifier = Modifier.weight(1f)
                         )
-                        IconButton(
-                            onClick = {
-                                val updated = currentSlot.copy(available = !currentSlot.available)
-                                updateSlot(updated)
-                                selectedSlot = updated // Update dialog state
-                            }
-                        ) {
-                            Icon(
-                                imageVector = if (currentSlot.available) Icons.Default.Check else Icons.Default.Close,
-                                contentDescription = "Toggle Availability",
-                                tint = if (currentSlot.available) Color.Green else Color.Red
-                            )
+
+                        val statusIcon = when {
+                            currentSlot.available -> Icons.Default.Check
+                            reportTimestamp != null -> Icons.Default.Build
+                            else -> Icons.Default.Close
                         }
+
+                        val iconTint = when {
+                            currentSlot.available -> Color.Green
+                            reportTimestamp != null -> Color(0xFFFFC107) // Yellow
+                            else -> Color.Red
+                        }
+
+                        Icon(
+                            imageVector = statusIcon,
+                            contentDescription = "Toggle Availability",
+                            tint = iconTint
+                        )
+
                     }
+                    if (!currentSlot.available && reportTimestamp != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val formattedDate = remember(reportTimestamp) {
+                            val date = Date(reportTimestamp)
+                            val format = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+                            format.format(date)
+                        }
+                        Text(
+                            "⚠️ Damages have been reported. Last report: $formattedDate",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Black
+                        )
+                    }
+
                 }
             },
             confirmButton = {
@@ -505,14 +554,23 @@ fun ChargerStationPanel(
                     ) {
                         Text("Close")
                     }
-                    TextButton(
-                        onClick = {
-                            val updated = currentSlot.copy(available = !currentSlot.available)
-                            updateSlot(updated)
-                            selectedSlot = updated
+                    if (!isAnonymous) {
+                        TextButton(
+                            onClick = {
+                                val updated = currentSlot.copy(available = !currentSlot.available)
+                                updateSlot(updated)
+                                selectedSlot = updated
+                                if (reportTimestamp != null) {
+                                    viewModel.fixSlot(updated.slotId)
+                                }
+                            }
+                        ) {
+                            if (reportTimestamp != null) {
+                                Text("Set as fixed?")
+                            } else {
+                                Text("Toggle Status")
+                            }
                         }
-                    ) {
-                        Text("Toggle Status")
                     }
                 }
             }

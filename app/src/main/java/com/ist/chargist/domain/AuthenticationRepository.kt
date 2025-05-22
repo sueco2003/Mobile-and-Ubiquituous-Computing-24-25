@@ -16,6 +16,8 @@ interface AuthenticationRepository {
 
     fun getCurrentUser(): FirebaseUser
 
+    fun isUserAnonymous(): Boolean
+
     fun signOutUser()
 
 }

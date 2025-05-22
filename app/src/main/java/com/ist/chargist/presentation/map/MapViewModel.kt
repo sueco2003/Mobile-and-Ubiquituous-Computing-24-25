@@ -70,10 +70,13 @@ class MapViewModel @Inject constructor(
     val filteredStations: State<List<ChargerStation>> get() = _filteredStations
     val searchQuery: String get() = _searchQuery.value
 
+
+
+
     init {
+        getCurrentLocation()
         getChargerStations()
         getFavorites()
-        getCurrentLocation()
     }
 
 
@@ -116,6 +119,9 @@ class MapViewModel @Inject constructor(
 
     private fun updateFilteredStations() {
         viewModelScope.launch {
+            val availabilityFilterActive = _activeFilters.contains("available")
+            val speedFilters = setOf("fast", "medium", "slow")
+
             // Base name filter
             val nameFiltered = if (_searchQuery.value.isNotBlank()) {
                 _allStations.filter { it.name.contains(_searchQuery.value, true) }
@@ -123,35 +129,103 @@ class MapViewModel @Inject constructor(
                 _allStations
             }
 
-            // Pre-fetch required slots
-            val stationsToProcess = nameFiltered.take(100) // Limit for performance
+            // Pre-fetch slots for first 100 stations
+            val stationsToProcess = nameFiltered.take(100)
             prefetchSlots(stationsToProcess)
 
             // Apply filters
             val filtered = stationsToProcess.filter { station ->
                 val slots = _stationSlotsCache[station.id] ?: emptyList()
+                val activeSpeedFilters = _activeFilters intersect speedFilters
+                val hasSlot = slots.isNotEmpty()
+
+                // Apply each filter
                 _activeFilters.all { filter ->
                     when (filter) {
-                        "available" -> slots.any { it.available }
-                        "fast" -> slots.any { it.speed == ChargeSpeed.F && it.available }
-                        "medium" -> slots.any { it.speed == ChargeSpeed.M && it.available }
-                        "slow" -> slots.any { it.speed == ChargeSpeed.S && it.available }
+                        "available" -> {
+                            // Only require availability if speed filters aren't active
+                            if (activeSpeedFilters.isEmpty()) {
+                                slots.any { it.available }
+                            } else {
+                                true // let speed filters handle availability check
+                            }
+                        }
+                        "fast", "medium", "slow" -> {
+                            val speed = when (filter) {
+                                "fast" -> ChargeSpeed.F
+                                "medium" -> ChargeSpeed.M
+                                else -> ChargeSpeed.S
+                            }
+                            slots.any {
+                                it.speed == speed && (!availabilityFilterActive || it.available)
+                            }
+                        }
+                        "card" -> station.payment.any { it.equals("credit", true) }
+                        "paypal" -> station.payment.any { it.equals("paypal", true) }
+                        "cash" -> station.payment.any { it.equals("cash", true) }
                         else -> true
                     }
                 }
             }
 
-            // Apply sorting
+            // Apply sorting with availability awareness
             val sorted = when (_selectedSort) {
-                "price" -> filtered.sortedBy { getMinPrice(it) }
-                "distance" -> filtered.sortedBy { calculateDistance(it) }
-                "speed" -> filtered.sortedByDescending { getMaxSpeed(it) }
+                "price" -> {
+                    if (_sortAscending) {
+                        filtered.sortedBy { getMinPrice(it, availabilityFilterActive) }
+                    } else {
+                        filtered.sortedByDescending { getMaxPrice(it, availabilityFilterActive) }
+                    }
+                }
+                "distance" -> {
+                    filtered.sortedWith(compareBy { calculateDistance(it) })
+                        .let { if (_sortAscending) it else it.reversed() }
+                }
                 else -> filtered
             }
 
-            _filteredStations.value = if (_sortAscending) sorted else sorted.reversed()
+            _filteredStations.value = sorted
         }
     }
+
+    private fun getMinPrice(station: ChargerStation, availabilityFilterActive: Boolean): Double {
+        val slots = _stationSlotsCache[station.id]
+
+        return (if (!availabilityFilterActive) {
+            // No availability filter: fallback to all prices
+            listOfNotNull(
+                station.slowPrice.toDouble(),
+                station.mediumPrice.toDouble(),
+                station.fastPrice.toDouble()
+            ).minOrNull() ?: Double.MAX_VALUE
+        } else {
+            // With availability: only consider available slot speeds
+            val filteredSlots = slots?.filter { it.available } ?: emptyList()
+            filteredSlots.minOfOrNull { getPriceForSpeed(station, it.speed) } ?: Double.MAX_VALUE
+        }) as Double
+    }
+
+    private fun getMaxPrice(station: ChargerStation, availabilityFilterActive: Boolean): Double {
+        val slots = _stationSlotsCache[station.id]
+
+        return (if (!availabilityFilterActive) {
+            // No availability filter: fallback to all prices
+            listOfNotNull(
+                station.slowPrice.toDouble(),
+                station.mediumPrice.toDouble(),
+                station.fastPrice.toDouble()
+            ).maxOrNull() ?: Double.MIN_VALUE
+        } else {
+            // With availability: only consider available slot speeds
+            val filteredSlots = slots?.filter { it.available } ?: emptyList()
+            filteredSlots.maxOfOrNull { getPriceForSpeed(station, it.speed) } ?: Double.MIN_VALUE
+        }) as Double
+    }
+
+
+
+
+
 
     private suspend fun prefetchSlots(stations: List<ChargerStation>) {
         coroutineScope {
@@ -170,13 +244,6 @@ class MapViewModel @Inject constructor(
             }.awaitAll()
         }
     }
-    // Sorting Helpers
-    private fun getMinPrice(station: ChargerStation): Double {
-        val slots = _stationSlotsCache[station.id] ?: return Double.MAX_VALUE
-        return slots.filter { it.available }
-            .minOfOrNull { getPriceForSpeed(station, it.speed) }
-            ?: Double.MAX_VALUE
-    }
 
     private fun getPriceForSpeed(station: ChargerStation, speed: ChargeSpeed): Double {
         return when (speed) {
@@ -186,11 +253,6 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    private fun getMaxSpeed(station: ChargerStation): Int {
-        return (_stationSlotsCache[station.id] ?: emptyList())
-            .filter { it.available }
-            .maxOfOrNull { it.speed.ordinal } ?: -1
-    }
 
     private fun calculateDistance(station: ChargerStation): Double {
         return _userLocation.value?.let { userLoc ->
@@ -264,12 +326,7 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    fun reportProblem(slotId: String) {
-        viewModelScope.launch {
-            dbRepo.reportDamagedSlot(slotId)
-                .onFailure { _errors.emit("Report failed: ${it.message}") }
-        }
-    }
+
 
     fun searchLocation(query: String, context: Context) {
         viewModelScope.launch {
@@ -288,6 +345,9 @@ class MapViewModel @Inject constructor(
     fun signOutUser() {
         authRepo.signOutUser()
     }
+    fun isUserAnonymous(): Boolean {
+        return authRepo.isUserAnonymous()
+    }
 
     fun getSlotsForStation(stationId: String) {
         viewModelScope.launch {
@@ -305,6 +365,47 @@ class MapViewModel @Inject constructor(
             }
         }
     }
+
+    private val _damageReports = mutableStateMapOf<String, Long?>()
+    val damageReports: Map<String, Long?> get() = _damageReports
+
+    fun checkDamageReport(slotId: String) {
+        viewModelScope.launch {
+            val result = dbRepo.getLatestDamageReportTimestamp(slotId)
+            result.onSuccess { timestamp ->
+                _damageReports[slotId] = timestamp
+            }.onFailure {
+                Timber.e(it)
+                _damageReports[slotId] = null
+            }
+        }
+    }
+
+    fun fixSlot(slotId: String) {
+        viewModelScope.launch {
+            val result = dbRepo.fixSlot(slotId)
+            result.onSuccess {
+                _damageReports[slotId] = null
+            }.onFailure {
+                Timber.e(it)
+                _damageReports[slotId] = null
+            }
+        }
+    }
+
+    fun reportProblems(slotId: String) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            _damageReports[slotId] = now // Optimistic update
+
+            val result = dbRepo.reportDamagedSlot(slotId)
+            result.onFailure {
+                Timber.e(it)
+                _damageReports[slotId] = null // Revert if it fails
+            }
+        }
+    }
+
 }
 
 

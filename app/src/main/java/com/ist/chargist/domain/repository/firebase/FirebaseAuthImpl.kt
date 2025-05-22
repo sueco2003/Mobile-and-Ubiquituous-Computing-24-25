@@ -142,6 +142,8 @@ class FirebaseAuthImpl @Inject constructor(
 
     override fun getCurrentUser(): FirebaseUser = FirebaseAuth.getInstance().currentUser!!
 
+    override fun isUserAnonymous(): Boolean = FirebaseAuth.getInstance().currentUser?.isAnonymous == true
+
     override fun signOutUser() = FirebaseAuth.getInstance().signOut()
 
 }

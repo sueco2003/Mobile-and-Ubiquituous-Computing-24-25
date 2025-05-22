@@ -82,6 +82,7 @@ fun MapScreen(
     val forceUpdate by viewModel.locationUpdates.collectAsState()
     val activity = context as Activity
 
+    val isAnonymous = remember { viewModel.isUserAnonymous() }
     val favoriteIds by viewModel.favouriteStationIds
 
 
@@ -287,6 +288,7 @@ fun MapScreen(
                         val isFavorite = ((favoriteIds as? UiState.Success)?.data as? List<String>?)?.contains(selectedStation!!.id) == true
                         ChargerStationPanel(
                             station = selectedStation!!,
+                            isAnonymous = isAnonymous,
                             viewModel = viewModel,
                             isFavorite = isFavorite,
                             onToggleFavorite = { viewModel.toggleFavorite(selectedStation!!.id) },
@@ -306,6 +308,16 @@ fun MapScreen(
             verticalArrangement = Arrangement.Bottom
         ){
 
+            // Add Station FAB
+            if (!isAnonymous) {
+                FloatingActionButton(
+                    onClick = navigateToAddChargerStation,
+                    modifier = Modifier
+                        .padding(8.dp)
+                ) {
+                    Icon(Icons.Default.Add, "Add Station")
+                }
+            }
             // Current Location FAB
             FloatingActionButton(
                 onClick = { viewModel.getCurrentLocation() },
@@ -313,15 +325,6 @@ fun MapScreen(
                     .padding(8.dp)
             ) {
                 Icon(Icons.Default.MyLocation, "Current Location")
-            }
-
-            // Add Station FAB
-            FloatingActionButton(
-                onClick = navigateToAddChargerStation,
-                modifier = Modifier
-                    .padding(8.dp)
-            ) {
-                Icon(Icons.Default.Add, "Add Station")
             }
             // Add Station FAB
             FloatingActionButton(

@@ -12,8 +12,8 @@ interface DatabaseRepository {
     suspend fun reportDamagedSlot(slotId: String): Result<Unit>
     suspend fun toggleFavorite(userId: String, stationId: String): Result<Unit>
     suspend fun getFavorites(userId: String): Result<List<String>>
-    suspend fun getUserId(): Result<String>
-
+    suspend fun getLatestDamageReportTimestamp(slotId: String): Result<Long?>
+    suspend fun fixSlot(slotId: String) : Result<Unit>
 
 
 }
