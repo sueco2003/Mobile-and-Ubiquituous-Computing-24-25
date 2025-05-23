@@ -1,8 +1,13 @@
 package com.ist.chargist.presentation.components
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -117,18 +122,37 @@ fun ChargerStationPanel(
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
+            val context = LocalContext.current
+            val isUnmetered = remember { isUnmeteredConnection(context) }
+            var loadImage by remember { mutableStateOf(isUnmetered) }
+
             if (!station.imageUri.isNullOrEmpty()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(station.imageUri.toUri())
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = "Image of ${station.name}",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp)
-                        .padding(bottom = 8.dp)
-                )
+                if (loadImage) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(station.imageUri.toUri())
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "Image of ${station.name}",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp)
+                            .padding(bottom = 8.dp),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp)
+                            .clickable { loadImage = true }
+                            .background(Color.Gray) // Optional placeholder color
+                            .padding(bottom = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Tap to load image", color = Color.White)
+                    }
+                }
             } else {
                 Image(
                     painter = painterResource(id = R.drawable.img_default_bg_charger),
@@ -577,4 +601,12 @@ fun ChargerStationPanel(
         )
     }
 }
+
+fun isUnmeteredConnection(context: Context): Boolean {
+    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val network = cm.activeNetwork ?: return false
+    val capabilities = cm.getNetworkCapabilities(network) ?: return false
+    return !cm.isActiveNetworkMetered && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+}
+
 

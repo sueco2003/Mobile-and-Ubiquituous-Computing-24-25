@@ -70,36 +70,24 @@ class MapViewModel @Inject constructor(
     val filteredStations: State<List<ChargerStation>> get() = _filteredStations
     val searchQuery: String get() = _searchQuery.value
 
-
-
-
-    init {
-        getCurrentLocation()
-        getChargerStations()
-        getFavorites()
-    }
-
-
-    // Station Data Management
-    private fun getChargerStations() {
-        viewModelScope.launch {
-            _chargerStationList.value = UiState.Loading
-            try {
-                dbRepo.getChargerStations()
-                    .onSuccess { stations ->
-                        _allStations.clear()
-                        _allStations.addAll(stations)
-                        updateFilteredStations()
-                        _chargerStationList.value = UiState.Success(stations)
-                    }
-                    .onFailure {
-                        _chargerStationList.value = UiState.Fail(it.message ?: "Unknown error")
-                    }
-            } catch (e: Exception) {
-                _chargerStationList.value = UiState.Fail(e.message ?: "Loading failed")
-            }
+    suspend fun getChargerStations() {
+        _chargerStationList.value = UiState.Loading
+        try {
+            dbRepo.getChargerStations()
+                .onSuccess { stations ->
+                    _allStations.clear()
+                    _allStations.addAll(stations)
+                    updateFilteredStations()
+                    _chargerStationList.value = UiState.Success(stations)
+                }
+                .onFailure {
+                    _chargerStationList.value = UiState.Fail(it.message ?: "Unknown error")
+                }
+        } catch (e: Exception) {
+            _chargerStationList.value = UiState.Fail(e.message ?: "Loading failed")
         }
     }
+
 
     // Search & Filter Implementation
     fun handleSearchInput(query: String) {
@@ -268,18 +256,32 @@ class MapViewModel @Inject constructor(
         } ?: Double.MAX_VALUE
     }
 
-    // Favorite Handling
     fun toggleFavorite(stationId: String) {
         viewModelScope.launch {
-            authRepo.getCurrentUser().uid.let { uid ->
-                dbRepo.toggleFavorite(uid, stationId)
-                    .onSuccess { getFavorites() }
-                    .onFailure { _errors.emit("Favorite update failed: ${it.message}") }
+            val uid = authRepo.getCurrentUser().uid
+
+            // Optimistically update UI
+            val currentFavorites = (_favouriteStationIds.value as? UiState.Success)?.data as? List<String>
+
+
+            val updatedFavorites = if (currentFavorites?.contains(stationId) == true) {
+                currentFavorites - stationId
+            } else {
+                currentFavorites?.plus(stationId) ?: emptyList()
             }
+            _favouriteStationIds.value = UiState.Success(updatedFavorites)
+
+            dbRepo.toggleFavorite(uid, stationId)
+                .onFailure {
+                    _errors.emit("Favorite update failed: ${it.message}")
+                    // Optional: Revert optimistic update or re-fetch
+                    getFavorites()
+                }
         }
     }
 
-    private fun getFavorites() {
+
+    fun getFavorites() {
         viewModelScope.launch {
             authRepo.getCurrentUser().uid.let { uid ->
                 _favouriteStationIds.value = UiState.Loading
@@ -299,18 +301,26 @@ class MapViewModel @Inject constructor(
         _cameraPosition.value = LatLng(station.lat.toDouble(), station.lon.toDouble())
     }
 
-    fun getCurrentLocation() {
+    fun getCurrentLocation(onResult: (LatLng?) -> Unit) {
         viewModelScope.launch {
             try {
-                locationClient.lastLocation.await()?.let { location ->
-                    _cameraPosition.value = LatLng(location.latitude, location.longitude)
-                    _forceLocationUpdate.value++  // Force recomposition
-                } ?: _errors.emit("Location unavailable")
+                val location = locationClient.lastLocation.await()
+                if (location != null) {
+                    val latLng = LatLng(location.latitude, location.longitude)
+                    _cameraPosition.value = latLng
+                    _forceLocationUpdate.value++
+                    onResult(latLng)
+                } else {
+                    _errors.emit("Location unavailable")
+                    onResult(null)
+                }
             } catch (e: SecurityException) {
                 _errors.emit("Permission required")
+                onResult(null)
             }
         }
     }
+
 
     // Slot Management
     fun updateSlots(slots: List<ChargerSlot>) {
