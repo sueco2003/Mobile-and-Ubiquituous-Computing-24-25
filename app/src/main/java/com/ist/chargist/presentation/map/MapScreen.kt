@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
@@ -52,6 +53,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,7 +69,10 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.CameraPositionState
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
@@ -76,6 +81,7 @@ import com.ist.chargist.presentation.components.ChargerStationPanel
 import com.ist.chargist.presentation.components.FilterSortDialog
 import com.ist.chargist.utils.UiState
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -196,8 +202,17 @@ fun MapScreen(
 
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
-            cameraPositionState = cameraState
-        ) {
+            cameraPositionState = cameraState,
+            properties = MapProperties(
+                isMyLocationEnabled = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+            ),
+            uiSettings = MapUiSettings(
+                myLocationButtonEnabled = false,
+                zoomControlsEnabled = false)
+        ){
             // Existing marker code...
             when (chargerStationsUiState) {
                 is UiState.Success -> {
@@ -242,6 +257,7 @@ fun MapScreen(
             var selectedSort by remember { mutableStateOf("distance") }
             var sortAscending by remember { mutableStateOf(true) }
 
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth(0.9f)
@@ -257,17 +273,16 @@ fun MapScreen(
                     onSearch = { viewModel.searchLocation(it, context) },
                     active = false,
                     onActiveChange = {},
-                    placeholder = { Text("Search stations or location...") }
+                    placeholder = { Text("Search stations or location...") },
+                    trailingIcon = {
+                        IconButton(onClick = { showFilterDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Default.FilterList,
+                                contentDescription = "Filter & Sort Stations"
+                            )
+                        }
+                    }
                 ) {}
-
-                IconButton(
-                    onClick = { showFilterDialog = true }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FilterList,
-                        contentDescription = "Filter & Sort Stations"
-                    )
-                }
             }
 
             if (closestStation != null) {
@@ -295,7 +310,8 @@ fun MapScreen(
                         .border(1.dp, Color.Gray, shape = RoundedCornerShape(8.dp))
                         .clickable {
                             viewModel.moveToStation(closestStation!!)
-                            closestStation = null}
+                            closestStation = null
+                        }
                         .padding(12.dp)
                 ) {
                     Column {
@@ -391,7 +407,7 @@ fun MapScreen(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(2.dp),
+                .padding(start = 2.dp, bottom = 50.dp),
             verticalArrangement = Arrangement.Bottom
         ){
 
@@ -422,8 +438,62 @@ fun MapScreen(
                 Icon(Icons.AutoMirrored.Filled.Logout, "Logout")
             }
         }
+
+        ZoomControls(cameraState)
+
     }
 }
+
+@Composable
+fun ZoomControls(
+    cameraState: CameraPositionState,
+    modifier: Modifier = Modifier
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val backgroundColor = MaterialTheme.colorScheme.primaryContainer
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize(),
+        contentAlignment = Alignment.BottomEnd
+    ){
+        Surface(
+            modifier = modifier
+                .padding(end = 10.dp, bottom = 58.dp),
+            shape = RoundedCornerShape(16.dp),
+            tonalElevation = 4.dp,
+            shadowElevation = 4.dp,
+            color = backgroundColor
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(8.dp)
+            ) {
+                IconButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            cameraState.animate(CameraUpdateFactory.zoomIn())
+                        }
+                    }
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Zoom In")
+                }
+
+                IconButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            cameraState.animate(CameraUpdateFactory.zoomOut())
+                        }
+                    }
+                ) {
+                    Icon(Icons.Default.Remove, contentDescription = "Zoom Out")
+                }
+            }
+        }
+    }
+}
+
+
 
 @Composable
 fun StationSearchResults(

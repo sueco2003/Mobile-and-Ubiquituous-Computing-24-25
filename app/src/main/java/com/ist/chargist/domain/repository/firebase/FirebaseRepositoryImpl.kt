@@ -25,7 +25,7 @@ import kotlin.coroutines.suspendCoroutine
 class FirebaseRepositoryImpl @Inject constructor(
     private val deviceInfo: DeviceInfoProvider,
     private val imageRepository: ImageRepository,
-    dispatcherProvider: DispatcherProvider
+    private val dispatcherProvider: DispatcherProvider
 ) : DatabaseRepository {
 
     companion object {
