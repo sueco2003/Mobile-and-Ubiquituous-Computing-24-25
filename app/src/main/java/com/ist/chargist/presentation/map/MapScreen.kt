@@ -256,6 +256,7 @@ fun MapScreen(
             val filterOptions = remember { mutableStateListOf<String>() }
             var selectedSort by remember { mutableStateOf("distance") }
             var sortAscending by remember { mutableStateOf(true) }
+            var showChargerStationResults by remember { mutableStateOf(false) }
 
 
             Row(
@@ -272,7 +273,7 @@ fun MapScreen(
                     },
                     onSearch = { viewModel.searchLocation(it, context) },
                     active = false,
-                    onActiveChange = {},
+                    onActiveChange = { showChargerStationResults = it },
                     placeholder = { Text("Search stations or location...") },
                     trailingIcon = {
                         IconButton(onClick = { showFilterDialog = true }) {
@@ -348,7 +349,7 @@ fun MapScreen(
             }
 
             // Display search results
-            if (viewModel.searchQuery.isNotEmpty()) {
+            if (showChargerStationResults) {
                 StationSearchResults(
                     stations = viewModel.filteredStations.value, // Access .value here
                     onStationClick = { station ->
@@ -356,6 +357,7 @@ fun MapScreen(
                         showPanel = false
                         viewModel.moveToStation(station)
                         searchQuery = ""
+                        showChargerStationResults = false // close results
                     },
                     modifier = Modifier
                         .fillMaxWidth(0.9f)
