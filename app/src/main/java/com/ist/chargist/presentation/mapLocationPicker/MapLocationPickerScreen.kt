@@ -3,6 +3,7 @@ package com.ist.chargist.presentation.mapLocationPicker
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -63,6 +64,7 @@ fun MapLocationPickerScreen(
             onClick = navigateBack,
             modifier = Modifier
                 .align(Alignment.TopStart)
+                .padding(18.dp, 26.dp)
                 .background(Color.White.copy(alpha = 0.8f), CircleShape)
         ) {
             Icon(
@@ -91,7 +93,7 @@ fun MapLocationPickerScreen(
                     },
                     text = {
                         Text(
-                            "Do you want to select: ${"%.4f".format(selectedLatLng!!.latitude)}, ${
+                            "Confirm selection Lat: ${"%.4f".format(selectedLatLng!!.latitude)}, Lon: ${
                                 "%.4f".format(selectedLatLng!!.longitude)
                             }?",
                             fontSize = 18.sp,
@@ -122,7 +124,7 @@ fun MapLocationPickerScreen(
                             )
                         }
                     },
-                    backgroundColor = Color.White.copy(alpha = 0.4f),  // lighter background
+                    backgroundColor = Color(0xFFF0F0F0),  // lighter background
                     borderColor = Color.Gray,
                     borderWidth = 1.dp,
                     shape = RoundedCornerShape(16.dp)

@@ -70,6 +70,10 @@ val TextColor: Color
     @Composable
     get() = if (!isSystemInDarkTheme()) Color.Black else Color.White
 
+val MutedTextColor: Color
+    @Composable
+    get() = if (!isSystemInDarkTheme()) Color.DarkGray else Color.LightGray
+
 val LineDividerColor: Color
     @Composable
     get() = if (!isSystemInDarkTheme()) MissingAssetRowColor else MissingAssetRowColorDark
