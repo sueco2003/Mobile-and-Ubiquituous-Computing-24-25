@@ -308,20 +308,34 @@ fun MapScreen(
                     is UiState.Success -> state.data as? List<ChargerStation> ?: emptyList()
                     else -> emptyList()
                 }
-
-                StationSearchResults(
-                    stations = searchStations,
-                    onStationClick = { station ->
-                        selectedStation = station
-                        showPanel = true
-                        viewModel.moveToStation(station)
-                        searchQuery = ""
-                        showChargerStationResults = false
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .padding(horizontal = 16.dp)
-                )
+                Popup(alignment = Alignment.Center) {
+                    Box(
+                        Modifier.clickable(
+                            onClick = {
+                                showChargerStationResults = false
+                            })
+                    ) {
+                        Box(
+                            Modifier
+                                .heightIn(600.dp)
+                                .padding(vertical = 90.dp)
+                        ) {
+                            StationSearchResults(
+                                stations = searchStations,
+                                onStationClick = { station ->
+                                    selectedStation = station
+                                    showPanel = true
+                                    viewModel.moveToStation(station)
+                                    searchQuery = ""
+                                    showChargerStationResults = false
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth(0.9f)
+                                    .padding(horizontal = 16.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
 
