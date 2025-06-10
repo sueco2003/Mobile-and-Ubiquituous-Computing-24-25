@@ -256,7 +256,7 @@ class FirebaseRepositoryImpl @Inject constructor(
         val slotToInsert = slot.toChargerSlotDtoFirebase(stationId)
 
         return try {
-            suspendCoroutine { continuation ->
+            val result = suspendCoroutine<Result<String>> { continuation ->
                 Firebase.firestore
                     .collection(SLOTS_DATABASE)
                     .document(slotToInsert.slotId)
@@ -276,6 +276,9 @@ class FirebaseRepositoryImpl @Inject constructor(
                         continuation.resume(Result.failure(exception))
                     }
             }
+            // Update available slots after slot is created/updated
+            updateChargerStationAvailableSlots(stationId)
+            result
         } catch (e: Exception) {
             Timber.e(e)
             Result.failure(e)
@@ -425,7 +428,44 @@ class FirebaseRepositoryImpl @Inject constructor(
         }
     }
 
+    private suspend fun updateChargerStationAvailableSlots(
+        stationId: String
+    ): Result<Unit> {
+        if (!deviceInfo.hasInternetConnection()) {
+            return Result.failure(Throwable(ERROR_NO_INTERNET))
+        }
 
+        return getSlotsForStation(stationId).fold(
+            onSuccess = { slots ->
+                Timber.tag("FirebaseRepository")
+                    .d("updateChargerStationAvailableSlots called for stationId: $slots")
+                val hasAvailableSlots = slots.any { it.available }
+                Timber.tag("FirebaseRepository")
+                    .d("updateChargerStationAvailableSlots: stationId=$stationId, hasAvailableSlots=$hasAvailableSlots")
+                try {
+                    suspendCoroutine { continuation ->
+                        Firebase.firestore
+                            .collection(STATIONS_DATABASE)
+                            .document(stationId)
+                            .update("availableSlots", hasAvailableSlots)
+                            .addOnSuccessListener {
+                                continuation.resume(Result.success(Unit))
+                            }
+                            .addOnFailureListener { exception ->
+                                continuation.resume(Result.failure(exception))
+                            }
+                    }
+                } catch (e: Exception) {
+                    Timber.e(e)
+                    Result.failure(e)
+                }
+            },
+            onFailure = { exception ->
+                Timber.e(exception, "Failed to get slots for station $stationId")
+                Result.failure(exception)
+            }
+        )
+    }
 
 }
 
