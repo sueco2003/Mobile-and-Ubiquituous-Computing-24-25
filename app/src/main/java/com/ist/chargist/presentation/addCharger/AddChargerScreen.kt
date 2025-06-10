@@ -191,6 +191,7 @@ private fun AddChargerContent(
                             slowPrice = viewModel.slowPrice.toFloatOrNull() ?: -1.0f,
                             mediumPrice = viewModel.mediumPrice.toFloatOrNull() ?: -1.0f,
                             fastPrice = viewModel.fastPrice.toFloatOrNull() ?: -1.0f,
+                            nearbyServices = viewModel.nearbyServices,
                             slotId = emptyList()
                         ),
                         viewModel.chargingSlots

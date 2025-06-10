@@ -24,6 +24,7 @@ data class ChargerStation(
     },
     val lowestPrice: Float = listOf(fastPrice, mediumPrice, slowPrice).filter { it >= 0 }.min(),
     val availableSlots: Boolean = false,
+    val nearbyServices: List<String> = emptyList(),
     val slotId: List<String> = emptyList(),
 ) : Parcelable
 

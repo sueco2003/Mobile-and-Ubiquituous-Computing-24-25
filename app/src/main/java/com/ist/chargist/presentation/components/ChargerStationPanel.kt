@@ -105,12 +105,11 @@ fun ChargerStationPanel(
         pendingSlotUpdates[updated.slotId] = updated
     }
 
-
-
     LaunchedEffect(station.id) {
         viewModel.getSlotsForStation(station.id)
     }
 
+    // what does this do?
     DisposableEffect(Unit) {
         onDispose {
             if (pendingSlotUpdates.isNotEmpty()) {
@@ -127,7 +126,10 @@ fun ChargerStationPanel(
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
             val context = LocalContext.current
             val isUnmetered = remember { isUnmeteredConnection(context) }
             var loadImage by remember { mutableStateOf(isUnmetered) }
@@ -142,8 +144,7 @@ fun ChargerStationPanel(
                         contentDescription = "Image of ${station.name}",
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(100.dp)
-                            .padding(bottom = 8.dp),
+                            .height(100.dp),
                         contentScale = ContentScale.Crop
                     )
                 } else {
@@ -152,8 +153,7 @@ fun ChargerStationPanel(
                             .fillMaxWidth()
                             .height(100.dp)
                             .clickable { loadImage = true }
-                            .background(Color.Gray) // Optional placeholder color
-                            .padding(bottom = 8.dp),
+                            .background(Color.Gray),
                         contentAlignment = Alignment.Center
                     ) {
                         Text("Tap to load image", color = Color.White)
@@ -162,11 +162,10 @@ fun ChargerStationPanel(
             } else {
                 Image(
                     painter = painterResource(id = R.drawable.img_default_bg_charger),
-                    contentDescription = "Default Charger Image",
+                    contentDescription = "Default Charging Station Image",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(100.dp)
-                        .padding(bottom = 8.dp),
+                        .height(100.dp),
                     contentScale = ContentScale.Crop
                 )
             }
@@ -200,144 +199,150 @@ fun ChargerStationPanel(
                         Icon(
                             imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
                             contentDescription = if (isFavorite) "Unmark favorite" else "Mark as favorite",
-                            tint = if (isFavorite) Color.Yellow else Color.Gray
+                            tint = if (isFavorite) Color(0xFFFFD700) else Color.Gray
                         )
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(4.dp))
 
-            Text(
-                "Lat: ${station.lat}, Lon: ${station.lon}",
-                style = MaterialTheme.typography.bodySmall
+            Column {
+                Text("Location", style = MaterialTheme.typography.titleSmall)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Lat: %.4f, Lon: %.4f".format(station.lat, station.lon),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            val prices = listOfNotNull(
+                station.fastPrice.takeIf { it >= 0 }?.let { "Fast: €${it}" },
+                station.mediumPrice.takeIf { it >= 0 }?.let { "Medium: €${it}" },
+                station.slowPrice.takeIf { it >= 0 }?.let { "Slow: €${it}" }
             )
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text("Prices:", style = MaterialTheme.typography.bodyMedium)
-            station.fastPrice.takeIf { it >= 0 }?.let {
-                Text(
-                    "Fast: ${it}€",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            station.mediumPrice.takeIf { it >= 0 }?.let {
-                Text(
-                    "Medium: ${it}€",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            station.slowPrice.takeIf { it >= 0 }?.let {
-                Text(
-                    "Slow: ${it}€",
-                    style = MaterialTheme.typography.bodySmall
-                )
+            if (prices.isNotEmpty()) {
+                Column {
+                    Text("Prices", style = MaterialTheme.typography.titleSmall)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(prices.joinToString(", "), style = MaterialTheme.typography.bodySmall)
+                }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text("Payment Methods:", style = MaterialTheme.typography.bodyMedium)
-            Row {
-                station.payment.forEach { method ->
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                        modifier = Modifier.padding(end = 6.dp)
-                    ) {
-                        Text(
-                            text = method,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.bodySmall
-                        )
+            if (station.payment.isNotEmpty()) {
+                Column {
+                    Text("Payment Methods", style = MaterialTheme.typography.titleSmall)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row {
+                        station.payment.forEach { method ->
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                modifier = Modifier.padding(end = 6.dp)
+                            ) {
+                                Text(
+                                    text = method,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (!isAnonymous) {
-                Button(onClick = {
-                    val newSlotId = UUID.randomUUID().toString()
-                    val newSlot = ChargerSlot(
-                        slotId = newSlotId,
-                        stationId = station.id,
-                        speed = ChargeSpeed.F,
-                        connector = Connector.CCS2,
-                        available = true
-                    )
-                    newSlots += newSlot
-                    pendingSlotUpdates[newSlotId] = newSlot
-                }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Add More Slots", style = MaterialTheme.typography.bodyMedium)
+            if (station.nearbyServices.isNotEmpty()) {
+                Column {
+                    Text("Nearby Services", style = MaterialTheme.typography.titleSmall)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row {
+                        station.nearbyServices.forEach { service ->
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                modifier = Modifier.padding(end = 6.dp)
+                            ) {
+                                Text(
+                                    text = service,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
                 }
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text("Available Slots:", style = MaterialTheme.typography.bodyMedium)
 
-            when (slotsState) {
-                is UiState.Loading -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                is UiState.Error -> Text("Failed to load slots.", color = Color.Red)
-                is UiState.Success -> {
-                    ((slotsState as UiState.Success).data as? List<ChargerSlot>)?.forEachIndexed { index, originalSlot ->
+            Column (verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Available Slots", style = MaterialTheme.typography.titleSmall)
+                when (slotsState) {
+                    is UiState.Loading -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    is UiState.Error -> Text("Failed to load slots.", color = Color.Red)
+                    is UiState.Success -> {
+                        ((slotsState as UiState.Success).data as? List<ChargerSlot>)?.forEachIndexed { index, originalSlot ->
 
-                        val slot = pendingSlotUpdates[originalSlot.slotId] ?: originalSlot
-                        var currentSpeed by remember { mutableStateOf(slot.speed) }
-                        var currentConnector by remember { mutableStateOf(slot.connector) }
-                        val isEditing = editingSlotId == slot.slotId
-                        val backgroundColor = if (slot.available)
-                            Color(0xFFE8F5E9) // light green for available
-                        else
-                            Color(0xFFFFEBEE) // light red for unavailable
+                            val slot = pendingSlotUpdates[originalSlot.slotId] ?: originalSlot
+                            var currentSpeed by remember { mutableStateOf(slot.speed) }
+                            var currentConnector by remember { mutableStateOf(slot.connector) }
+                            val isEditing = editingSlotId == slot.slotId
+                            val backgroundColor = if (slot.available)
+                                Color(0xFFE8F5E9) // light green for available
+                            else
+                                Color(0xFFFFEBEE) // light red for unavailable
 
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = backgroundColor,
-                            tonalElevation = 2.dp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .clickable { selectedSlot = slot
-                                    viewModel.checkDamageReport(slot.slotId)}, // Open popup on click
-                        ) {
-                            Column(Modifier.padding(8.dp)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth()
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = backgroundColor,
+                                tonalElevation = 2.dp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedSlot = slot
+                                        viewModel.checkDamageReport(slot.slotId)}, // Open popup on click
+                            ) {
+                                Column(
+                                    Modifier.padding(12.dp, 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Text(
-                                        "Charger ${index + 1}",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    IconButton(onClick = {
-                                        // Set slot availability to false locally
-                                        pendingSlotUpdates[slot.slotId] = slot.copy(available = false)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            "Slot ${index + 1}",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        IconButton(onClick = {
+                                            // Set slot availability to false locally
+                                            pendingSlotUpdates[slot.slotId] = slot.copy(available = false)
 
-                                        // Trigger ViewModel logic
-                                        viewModel.reportProblems(slot.slotId)
-                                    }) {
-                                        Icon(Icons.Default.Warning, contentDescription = "Report")
-                                    }
-                                    IconButton(onClick = {
-                                        if (isEditing) {
-                                            pendingSlotUpdates[slot.slotId] = slot.copy(
-                                                speed = currentSpeed,
-                                                connector = currentConnector
+                                            // Trigger ViewModel logic
+                                            viewModel.reportProblems(slot.slotId)
+                                        }) {
+                                            Icon(
+                                                Icons.Default.Warning,
+                                                contentDescription = "Report"
                                             )
                                         }
-                                        editingSlotId = if (isEditing) null else slot.slotId
-                                    }) {
-                                        Icon(
-                                            Icons.Default.Edit,
-                                            contentDescription = "Edit",
-                                            tint = if (isEditing) MaterialTheme.colorScheme.primary else LocalContentColor.current
-                                        )
+                                        IconButton(onClick = {
+                                            if (isEditing) {
+                                                pendingSlotUpdates[slot.slotId] = slot.copy(
+                                                    speed = currentSpeed,
+                                                    connector = currentConnector
+                                                )
+                                            }
+                                            editingSlotId = if (isEditing) null else slot.slotId
+                                        }) {
+                                            Icon(
+                                                Icons.Default.Edit,
+                                                contentDescription = "Edit",
+                                                tint = if (isEditing) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                                            )
+                                        }
                                     }
-                                }
 
-                                if (isEditing) {
-                                    Column(modifier = Modifier.padding(top = 8.dp)) {
-                                        // Speed dropdown
+                                    if (isEditing) {
                                         var expandedSpeed by remember { mutableStateOf(false) }
+                                        var expandedConnector by remember { mutableStateOf(false) }
+
                                         ExposedDropdownMenuBox(
                                             expanded = expandedSpeed,
                                             onExpandedChange = { expandedSpeed = !expandedSpeed }
@@ -370,10 +375,7 @@ fun ChargerStationPanel(
                                             }
                                         }
 
-                                        Spacer(modifier = Modifier.height(8.dp))
-
                                         // Connector dropdown
-                                        var expandedConnector by remember { mutableStateOf(false) }
                                         ExposedDropdownMenuBox(
                                             expanded = expandedConnector,
                                             onExpandedChange = {
@@ -411,105 +413,120 @@ fun ChargerStationPanel(
                                 }
                             }
                         }
-                    }
 
-                    // Render new slots (unsaved additions)
-                    newSlots.forEachIndexed { index, slot ->
-                        var currentSpeed by remember { mutableStateOf(slot.speed) }
-                        var currentConnector by remember { mutableStateOf(slot.connector) }
+                        // Render new slots (unsaved additions)
+                        newSlots.forEachIndexed { index, slot ->
+                            var currentSpeed by remember { mutableStateOf(slot.speed) }
+                            var currentConnector by remember { mutableStateOf(slot.connector) }
 
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFFFFF9C4), // light yellow,
-                            tonalElevation = 2.dp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .clickable { selectedSlot = slot }, // Open popup on click
-                        ) {
-                            Column(Modifier.padding(8.dp)) {
-                                Text(
-                                    "New Charger ${index + 1}",
-                                    style = MaterialTheme.typography.titleSmall
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                // Speed dropdown
-                                var expandedSpeed by remember { mutableStateOf(false) }
-                                ExposedDropdownMenuBox(
-                                    expanded = expandedSpeed,
-                                    onExpandedChange = { expandedSpeed = !expandedSpeed }
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color(0xFFFFF9C4), // light yellow,
+                                tonalElevation = 2.dp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedSlot = slot }, // Open popup on click
+                            ) {
+                                Column(
+                                    Modifier.padding(12.dp, 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    TextField(
-                                        readOnly = true,
-                                        value = currentSpeed.name,
-                                        onValueChange = {},
-                                        label = { Text("Speed") },
-                                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                                    Text(
+                                        "New Slot ${index + 1}",
+                                        style = MaterialTheme.typography.titleSmall
                                     )
-                                    ExposedDropdownMenu(
+
+                                    var expandedSpeed by remember { mutableStateOf(false) }
+                                    var expandedConnector by remember { mutableStateOf(false) }
+
+                                    ExposedDropdownMenuBox(
                                         expanded = expandedSpeed,
-                                        onDismissRequest = { expandedSpeed = false }
+                                        onExpandedChange = { expandedSpeed = !expandedSpeed }
                                     ) {
-                                        ChargeSpeed.entries.forEach { option ->
-                                            DropdownMenuItem(
-                                                text = { Text(option.name) },
-                                                onClick = {
-                                                    currentSpeed = option
-                                                    expandedSpeed = false
-                                                    val updated = slot.copy(
-                                                        speed = currentSpeed,
-                                                        connector = currentConnector
-                                                    )
-                                                    updateSlot(updated)
-                                                }
-                                            )
+                                        TextField(
+                                            readOnly = true,
+                                            value = currentSpeed.name,
+                                            onValueChange = {},
+                                            label = { Text("Speed") },
+                                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                                        )
+                                        ExposedDropdownMenu(
+                                            expanded = expandedSpeed,
+                                            onDismissRequest = { expandedSpeed = false }
+                                        ) {
+                                            ChargeSpeed.entries.forEach { option ->
+                                                DropdownMenuItem(
+                                                    text = { Text(option.name) },
+                                                    onClick = {
+                                                        currentSpeed = option
+                                                        expandedSpeed = false
+                                                        val updated = slot.copy(
+                                                            speed = currentSpeed,
+                                                            connector = currentConnector
+                                                        )
+                                                        updateSlot(updated)
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
-                                }
 
-                                Spacer(modifier = Modifier.height(8.dp))
-
-// Connector dropdown
-                                var expandedConnector by remember { mutableStateOf(false) }
-                                ExposedDropdownMenuBox(
-                                    expanded = expandedConnector,
-                                    onExpandedChange = { expandedConnector = !expandedConnector }
-                                ) {
-                                    TextField(
-                                        readOnly = true,
-                                        value = currentConnector.name,
-                                        onValueChange = {},
-                                        label = { Text("Connector") },
-                                        modifier = Modifier.menuAnchor().fillMaxWidth()
-                                    )
-                                    ExposedDropdownMenu(
+                                    ExposedDropdownMenuBox(
                                         expanded = expandedConnector,
-                                        onDismissRequest = { expandedConnector = false }
+                                        onExpandedChange = { expandedConnector = !expandedConnector }
                                     ) {
-                                        Connector.entries.forEach { option ->
-                                            DropdownMenuItem(
-                                                text = { Text(option.name) },
-                                                onClick = {
-                                                    currentConnector = option
-                                                    expandedConnector = false
-                                                    val updated = slot.copy(
-                                                        speed = currentSpeed,
-                                                        connector = currentConnector
-                                                    )
-                                                    updateSlot(updated)
-                                                }
-                                            )
+                                        TextField(
+                                            readOnly = true,
+                                            value = currentConnector.name,
+                                            onValueChange = {},
+                                            label = { Text("Connector") },
+                                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                                        )
+                                        ExposedDropdownMenu(
+                                            expanded = expandedConnector,
+                                            onDismissRequest = { expandedConnector = false }
+                                        ) {
+                                            Connector.entries.forEach { option ->
+                                                DropdownMenuItem(
+                                                    text = { Text(option.name) },
+                                                    onClick = {
+                                                        currentConnector = option
+                                                        expandedConnector = false
+                                                        val updated = slot.copy(
+                                                            speed = currentSpeed,
+                                                            connector = currentConnector
+                                                        )
+                                                        updateSlot(updated)
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                }
 
-                is UiState.Fail -> Unit
-                UiState.Idle -> Unit
+                    is UiState.Fail -> Unit
+                    UiState.Idle -> Unit
+                }
+            }
+
+            if (!isAnonymous) {
+                Button(onClick = {
+                    val newSlotId = UUID.randomUUID().toString()
+                    val newSlot = ChargerSlot(
+                        slotId = newSlotId,
+                        stationId = station.id,
+                        speed = ChargeSpeed.F,
+                        connector = Connector.CCS2,
+                        available = true
+                    )
+                    newSlots += newSlot
+                    pendingSlotUpdates[newSlotId] = newSlot
+                }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Add Slot", style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
     }
@@ -540,7 +557,7 @@ fun ChargerStationPanel(
                         }
 
                         val statusColor = when {
-                            currentSlot.available -> Color.Green
+                            currentSlot.available -> Color(0XFF006400)
                             reportTimestamp != null -> Color(0xFFFFC107)
                             else -> Color.Red
                         }
@@ -559,7 +576,7 @@ fun ChargerStationPanel(
                         }
 
                         val iconTint = when {
-                            currentSlot.available -> Color.Green
+                            currentSlot.available -> Color(0xFF006400)
                             reportTimestamp != null -> Color(0xFFFFC107) // Yellow
                             else -> Color.Red
                         }
