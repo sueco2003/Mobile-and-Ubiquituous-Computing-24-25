@@ -285,51 +285,6 @@ fun MapScreen(
                 ) {}
             }
 
-            if (closestStation != null) {
-                val backgroundColor = remember { Animatable(Color.White) }
-
-                LaunchedEffect(closestStation) {
-                    repeat(5) {
-                        backgroundColor.animateTo(
-                            targetValue = Color(0xFFFFF59D), // light yellow
-                            animationSpec = tween(durationMillis = 250)
-                        )
-                        backgroundColor.animateTo(
-                            targetValue = Color.White,
-                            animationSpec = tween(durationMillis = 250)
-                        )
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .widthIn(max = 300.dp)
-                        .align(Alignment.CenterHorizontally)
-                        .background(backgroundColor.value, shape = RoundedCornerShape(8.dp))
-                        .border(1.dp, Color.Gray, shape = RoundedCornerShape(8.dp))
-                        .clickable {
-                            viewModel.moveToStation(closestStation!!)
-                            closestStation = null
-                        }
-                        .padding(12.dp)
-                ) {
-                    Column {
-                        Text(text = closestStation!!.name, fontWeight = FontWeight.Bold)
-                        Text(
-                            text = "Lat: %.5f, Lon: %.5f".format(
-                                closestStation!!.lat.toDouble(), closestStation!!.lon.toDouble()
-                            ),
-                            fontSize = 12.sp
-                        )
-                        Text(
-                            text = "Payments: ${closestStation!!.payment.joinToString()}",
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            }
-
             // Filter/Sort Dialog
             if (showFilterDialog) {
                 FilterSortDialog(
@@ -370,6 +325,8 @@ fun MapScreen(
             }
         }
 
+
+
         if (showPanel && selectedStation != null) {
             Popup(alignment = Alignment.Center) {
                 Box(
@@ -404,6 +361,51 @@ fun MapScreen(
                             }
                         )
                     }
+                }
+            }
+        }
+
+        if (closestStation != null) {
+            val backgroundColor = remember { Animatable(Color.White) }
+
+            LaunchedEffect(closestStation) {
+                repeat(5) {
+                    backgroundColor.animateTo(
+                        targetValue = Color(0xFFFFF59D), // light yellow
+                        animationSpec = tween(durationMillis = 250)
+                    )
+                    backgroundColor.animateTo(
+                        targetValue = Color.White,
+                        animationSpec = tween(durationMillis = 250)
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 16.dp, vertical = 100.dp)
+                    .widthIn(max = 300.dp)
+                    .background(backgroundColor.value, shape = RoundedCornerShape(8.dp))
+                    .border(1.dp, Color.Gray, shape = RoundedCornerShape(8.dp))
+                    .clickable {
+                        viewModel.moveToStation(closestStation!!)
+                        closestStation = null
+                    }
+                    .padding(12.dp)
+            ) {
+                Column {
+                    Text(text = closestStation!!.name, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "Lat: %.5f, Lon: %.5f".format(
+                            closestStation!!.lat.toDouble(), closestStation!!.lon.toDouble()
+                        ),
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        text = "Payments: ${closestStation!!.payment.joinToString()}",
+                        fontSize = 12.sp
+                    )
                 }
             }
         }
