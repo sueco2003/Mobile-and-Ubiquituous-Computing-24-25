@@ -34,7 +34,7 @@ import com.ist.chargist.ui.theme.ImageDialog
 import com.ist.chargist.ui.theme.TextColor
 
 @Composable
-fun AddChargerDialog(
+fun ChargerAddedDialog(
     navigateBack: () -> Unit,
 ) {
     var showDialog by remember { mutableStateOf(false) }
