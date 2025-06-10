@@ -72,6 +72,12 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import android.content.Intent
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
+
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -176,6 +182,19 @@ fun ChargerStationPanel(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
+
+                // Share button
+                IconButton(onClick = {
+                    shareStation(context, station)
+                }) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "Share station",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                // Favorite button (existing code)
                 if (!isAnonymous) {
                     IconButton(onClick = onToggleFavorite) {
                         Icon(
@@ -609,4 +628,39 @@ fun isUnmeteredConnection(context: Context): Boolean {
     return !cm.isActiveNetworkMetered && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
 }
 
+private fun shareStation(context: Context, station: ChargerStation) {
+    val shareText = buildString {
+        appendLine("🔌 ${station.name}")
+        appendLine("📍 Location: ${station.lat}, ${station.lon}")
+        appendLine()
+        appendLine("💰 Prices:")
+        station.fastPrice.takeIf { it >= 0 }?.let { appendLine("  Fast: €$it") }
+        station.mediumPrice.takeIf { it >= 0 }?.let { appendLine("  Medium: €$it") }
+        station.slowPrice.takeIf { it >= 0 }?.let { appendLine("  Slow: €$it") }
+        appendLine()
+        appendLine("Payment Methods: ${transformPaymentMethod(station.payment).joinToString(", ")}")
+        appendLine()
+        appendLine("Shared via ChargiIt App")
+    }
 
+    val shareIntent = Intent().apply {
+        action = Intent.ACTION_SEND
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, shareText)
+        putExtra(Intent.EXTRA_SUBJECT, "Charging Station: ${station.name}")
+    }
+
+    val chooserIntent = Intent.createChooser(shareIntent, "Share charging station via")
+    context.startActivity(chooserIntent)
+}
+
+private fun transformPaymentMethod(paymentMethods: List<String>): List<String> {
+    return paymentMethods.map { method ->
+        when (method.lowercase(Locale.getDefault())) {
+            "credit card" -> "Credit Card"
+            "paypal" -> "Debit Card"
+            "cash" -> "Cash"
+            else -> method // Keep original if no match
+        }
+    }
+}
