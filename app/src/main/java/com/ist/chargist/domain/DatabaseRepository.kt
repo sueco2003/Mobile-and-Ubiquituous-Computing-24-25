@@ -1,10 +1,17 @@
 package com.ist.chargist.domain
 
+import com.google.android.gms.maps.model.LatLng
 import com.ist.chargist.domain.model.ChargerSlot
 import com.ist.chargist.domain.model.ChargerStation
 
 interface DatabaseRepository {
 
+    suspend fun getFilteredStations(
+        lastStationID: String,
+        searchQuery: String = "",
+        filters: List<String> = emptyList(),
+        userLocation: LatLng? = null,
+    ): Result<List<ChargerStation>>
     suspend fun getChargerStations() : Result<List<ChargerStation>>
     suspend fun createOrUpdateChargerStation(station: ChargerStation, slots: List<ChargerSlot>): Result<List<ChargerStation>>
     suspend fun createOrUpdateChargerSlot(stationId: String, slot: ChargerSlot) : Result<String>

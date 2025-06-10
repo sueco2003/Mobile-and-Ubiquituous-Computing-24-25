@@ -1,9 +1,9 @@
 package com.ist.chargist.presentation.map
 
-
 import android.content.Context
 import android.location.Geocoder
 import android.location.Location
+import android.util.Log
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -21,9 +21,6 @@ import com.ist.chargist.domain.model.ChargerSlot
 import com.ist.chargist.domain.model.ChargerStation
 import com.ist.chargist.utils.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,9 +36,11 @@ class MapViewModel @Inject constructor(
     private val locationClient: FusedLocationProviderClient
 ) : ViewModel() {
 
-    // State Management
-    private val _chargerStationList = mutableStateOf<UiState>(UiState.Idle)
-    val chargerStationList: State<UiState> get() = _chargerStationList
+    private val _mapStations = mutableStateOf<UiState>(UiState.Idle)
+    val mapStations: State<UiState> get() = _mapStations
+
+    private val _searchResults = mutableStateOf<UiState>(UiState.Idle)
+    val searchResults: State<UiState> get() = _searchResults
 
     private val _favouriteStationIds = mutableStateOf<UiState>(UiState.Idle)
     val favouriteStationIds: State<UiState> get() = _favouriteStationIds
@@ -57,9 +56,7 @@ class MapViewModel @Inject constructor(
     private val _forceLocationUpdate = MutableStateFlow(0)
     val locationUpdates = _forceLocationUpdate.asStateFlow()
 
-    // Search & Filter State
-    private val _allStations = mutableStateListOf<ChargerStation>()
-    private val _filteredStations = mutableStateOf<List<ChargerStation>>(emptyList())
+    // Search & Filter State - Only affects search results
     private val _searchQuery = mutableStateOf("")
     private val _activeFilters = mutableStateListOf<String>()
     private var _selectedSort by mutableStateOf("distance")
@@ -67,33 +64,104 @@ class MapViewModel @Inject constructor(
     private val _stationSlotsCache = mutableStateMapOf<String, List<ChargerSlot>>()
     private val _userLocation = mutableStateOf<LatLng?>(null)
 
-    val filteredStations: State<List<ChargerStation>> get() = _filteredStations
-    val searchQuery: String get() = _searchQuery.value
+    private var _searchLastStationId = ""
+    private var _isLoadingMoreSearch = mutableStateOf(false)
+    private var _hasMoreSearchData = mutableStateOf(true)
+    private var _allSearchResults = mutableStateListOf<ChargerStation>()
 
-    suspend fun getChargerStations() {
-        _chargerStationList.value = UiState.Loading
+    val searchQuery: String get() = _searchQuery.value
+    val isLoadingMoreSearch: State<Boolean> get() = _isLoadingMoreSearch
+    val hasMoreSearchData: State<Boolean> get() = _hasMoreSearchData
+
+
+    suspend fun getAllStationsForMap() {
+        _mapStations.value = UiState.Loading
         try {
-            dbRepo.getChargerStations()
-                .onSuccess { stations ->
-                    _allStations.clear()
-                    _allStations.addAll(stations)
-                    updateFilteredStations()
-                    _chargerStationList.value = UiState.Success(stations)
-                }
-                .onFailure {
-                    _chargerStationList.value = UiState.Fail(it.message ?: "Unknown error")
-                }
+            dbRepo.getChargerStations().onSuccess { stations ->
+                _mapStations.value = UiState.Success(stations)
+            }.onFailure { error ->
+                _mapStations.value = UiState.Fail(error.message ?: "Unknown error")
+            }
         } catch (e: Exception) {
-            _chargerStationList.value = UiState.Fail(e.message ?: "Loading failed")
+            _mapStations.value = UiState.Fail(e.message ?: "Loading failed")
         }
     }
 
+    private suspend fun getFilteredStationsForSearch(isLoadingMore: Boolean = false) {
+        if (!isLoadingMore) {
+            _searchResults.value = UiState.Loading
+        }
 
-    // Search & Filter Implementation
+        try {
+            val filters = buildFilterList()
+
+            dbRepo.getFilteredStations(
+                lastStationID = _searchLastStationId,
+                searchQuery = _searchQuery.value,
+                filters = filters,
+                userLocation = _userLocation.value
+            ).onSuccess { stations ->
+                if (stations.isEmpty()) {
+                    _hasMoreSearchData.value = false
+                } else {
+                    if (isLoadingMore) {
+                        _allSearchResults.addAll(stations)
+                    } else {
+                        _allSearchResults.clear()
+                        _allSearchResults.addAll(stations)
+                    }
+
+                    // Update last station ID for pagination
+                    _searchLastStationId = stations.lastOrNull()?.id ?: ""
+
+                    if (!isLoadingMore) {
+                        _searchResults.value = UiState.Success(_allSearchResults.toList())
+                    }
+                }
+            }.onFailure { error ->
+                if (!isLoadingMore) {
+                    _searchResults.value = UiState.Fail(error.message ?: "Unknown error")
+                } else {
+                    _errors.emit("Failed to load more search results: ${error.message}")
+                }
+            }
+        } catch (e: Exception) {
+            if (!isLoadingMore) {
+                _searchResults.value = UiState.Fail(e.message ?: "Loading failed")
+            } else {
+                _errors.emit("Failed to load more search results: ${e.message}")
+            }
+        }
+    }
+
+    fun loadMoreSearchResults() {
+        if (_isLoadingMoreSearch.value || !_hasMoreSearchData.value) return
+
+        viewModelScope.launch {
+            _isLoadingMoreSearch.value = true
+            getFilteredStationsForSearch(isLoadingMore = true)
+            _isLoadingMoreSearch.value = false
+        }
+    }
+
+    private fun resetSearchPagination() {
+        _searchLastStationId = ""
+        _hasMoreSearchData.value = true
+        _allSearchResults.clear()
+    }
+
     fun handleSearchInput(query: String) {
         _searchQuery.value = query
-        viewModelScope.launch {
-            updateFilteredStations()
+
+        if (query.isBlank()) {
+            // Clear search results when query is empty
+            _searchResults.value = UiState.Success(emptyList<ChargerStation>())
+            resetSearchPagination()
+        } else {
+            viewModelScope.launch {
+                resetSearchPagination()
+                getFilteredStationsForSearch()
+            }
         }
     }
 
@@ -102,167 +170,46 @@ class MapViewModel @Inject constructor(
         _activeFilters.addAll(filters)
         _selectedSort = sort
         _sortAscending = ascending
-        updateFilteredStations()
+
+        Timber.tag("MapViewModel")
+            .d("Applying filters: $filters, sort: $sort, ascending: $ascending")
+        // Only trigger search if there's a query or filters are applied
+        if (_searchQuery.value.isNotBlank() || filters.isNotEmpty() || sort.isNotBlank()) {
+            viewModelScope.launch {
+                resetSearchPagination()
+                getFilteredStationsForSearch()
+            }
+        }
     }
 
-    private fun updateFilteredStations() {
+    fun triggerInitialSearch() {
         viewModelScope.launch {
-            val availabilityFilterActive = _activeFilters.contains("available")
-            val speedFilters = setOf("fast", "medium", "slow")
-
-            // Base name filter
-            val nameFiltered = if (_searchQuery.value.isNotBlank()) {
-                _allStations.filter { it.name.contains(_searchQuery.value, true) }
-            } else {
-                _allStations
-            }
-
-            // Pre-fetch slots for first 100 stations
-            val stationsToProcess = nameFiltered.take(100)
-            prefetchSlots(stationsToProcess)
-
-            // Apply filters
-            val filtered = stationsToProcess.filter { station ->
-                val slots = _stationSlotsCache[station.id] ?: emptyList()
-                val activeSpeedFilters = _activeFilters intersect speedFilters
-                val hasSlot = slots.isNotEmpty()
-
-                // Apply each filter
-                _activeFilters.all { filter ->
-                    when (filter) {
-                        "available" -> {
-                            // Only require availability if speed filters aren't active
-                            if (activeSpeedFilters.isEmpty()) {
-                                slots.any { it.available }
-                            } else {
-                                true // let speed filters handle availability check
-                            }
-                        }
-                        "fast", "medium", "slow" -> {
-                            val speed = when (filter) {
-                                "fast" -> ChargeSpeed.F
-                                "medium" -> ChargeSpeed.M
-                                else -> ChargeSpeed.S
-                            }
-                            slots.any {
-                                it.speed == speed && (!availabilityFilterActive || it.available)
-                            }
-                        }
-                        "card" -> station.payment.any { it.equals("credit", true) }
-                        "paypal" -> station.payment.any { it.equals("paypal", true) }
-                        "cash" -> station.payment.any { it.equals("cash", true) }
-                        else -> true
-                    }
-                }
-            }
-
-            // Apply sorting with availability awareness
-            val sorted = when (_selectedSort) {
-                "price" -> {
-                    if (_sortAscending) {
-                        filtered.sortedBy { getMinPrice(it, availabilityFilterActive) }
-                    } else {
-                        filtered.sortedByDescending { getMaxPrice(it, availabilityFilterActive) }
-                    }
-                }
-                "distance" -> {
-                    filtered.sortedWith(compareBy { calculateDistance(it) })
-                        .let { if (_sortAscending) it else it.reversed() }
-                }
-                else -> filtered
-            }
-
-            _filteredStations.value = sorted
+            resetSearchPagination()
+            getFilteredStationsForSearch()
         }
     }
 
-    private fun getMinPrice(station: ChargerStation, availabilityFilterActive: Boolean): Double {
-        val slots = _stationSlotsCache[station.id]
+    private fun buildFilterList(): List<String> {
+        val filters = mutableListOf<String>()
 
-        return (if (!availabilityFilterActive) {
-            // No availability filter: fallback to all prices
-            listOfNotNull(
-                station.slowPrice.toDouble(),
-                station.mediumPrice.toDouble(),
-                station.fastPrice.toDouble()
-            ).minOrNull() ?: Double.MAX_VALUE
+        filters.addAll(_activeFilters)
+
+        filters.add(_selectedSort)
+        if (_sortAscending) {
+            filters.add("ascending")
         } else {
-            // With availability: only consider available slot speeds
-            val filteredSlots = slots?.filter { it.available } ?: emptyList()
-            filteredSlots.minOfOrNull { getPriceForSpeed(station, it.speed) } ?: Double.MAX_VALUE
-        }) as Double
-    }
-
-    private fun getMaxPrice(station: ChargerStation, availabilityFilterActive: Boolean): Double {
-        val slots = _stationSlotsCache[station.id]
-
-        return (if (!availabilityFilterActive) {
-            // No availability filter: fallback to all prices
-            listOfNotNull(
-                station.slowPrice.toDouble(),
-                station.mediumPrice.toDouble(),
-                station.fastPrice.toDouble()
-            ).maxOrNull() ?: Double.MIN_VALUE
-        } else {
-            // With availability: only consider available slot speeds
-            val filteredSlots = slots?.filter { it.available } ?: emptyList()
-            filteredSlots.maxOfOrNull { getPriceForSpeed(station, it.speed) } ?: Double.MIN_VALUE
-        }) as Double
-    }
-
-
-
-
-
-
-    private suspend fun prefetchSlots(stations: List<ChargerStation>) {
-        coroutineScope {
-            stations.map { station ->
-                async<Unit> {
-                    if (!_stationSlotsCache.containsKey(station.id)) {
-                        dbRepo.getSlotsForStation(station.id)
-                            .onSuccess { slots ->
-                                _stationSlotsCache[station.id] = slots
-                            }
-                            .onFailure {
-                                Timber.e("Error fetching slots for ${station.id}")
-                            }
-                    }
-                }
-            }.awaitAll()
+            filters.add("descending")
         }
+
+        return filters
     }
 
-    private fun getPriceForSpeed(station: ChargerStation, speed: ChargeSpeed): Double {
-        return when (speed) {
-            ChargeSpeed.F -> station.fastPrice?.toDouble() ?: Double.MAX_VALUE
-            ChargeSpeed.M -> station.mediumPrice?.toDouble() ?: Double.MAX_VALUE
-            ChargeSpeed.S -> station.slowPrice?.toDouble() ?: Double.MAX_VALUE
-        }
-    }
-
-
-    private fun calculateDistance(station: ChargerStation): Double {
-        return _userLocation.value?.let { userLoc ->
-            val results = FloatArray(1)
-            Location.distanceBetween(
-                userLoc.latitude,
-                userLoc.longitude,
-                station.lat.toDouble(),
-                station.lon.toDouble(),
-                results
-            )
-            results[0].toDouble()
-        } ?: Double.MAX_VALUE
-    }
 
     fun toggleFavorite(stationId: String) {
         viewModelScope.launch {
             val uid = authRepo.getCurrentUser().uid
 
-            // Optimistically update UI
             val currentFavorites = (_favouriteStationIds.value as? UiState.Success)?.data as? List<String>
-
 
             val updatedFavorites = if (currentFavorites?.contains(stationId) == true) {
                 currentFavorites - stationId
@@ -274,12 +221,10 @@ class MapViewModel @Inject constructor(
             dbRepo.toggleFavorite(uid, stationId)
                 .onFailure {
                     _errors.emit("Favorite update failed: ${it.message}")
-                    // Optional: Revert optimistic update or re-fetch
                     getFavorites()
                 }
         }
     }
-
 
     fun getFavorites() {
         viewModelScope.launch {
@@ -296,7 +241,6 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    // Location & UI Actions
     fun moveToStation(station: ChargerStation) {
         _cameraPosition.value = LatLng(station.lat.toDouble(), station.lon.toDouble())
     }
@@ -308,6 +252,7 @@ class MapViewModel @Inject constructor(
                 if (location != null) {
                     val latLng = LatLng(location.latitude, location.longitude)
                     _cameraPosition.value = latLng
+                    _userLocation.value = latLng
                     _forceLocationUpdate.value++
                     onResult(latLng)
                 } else {
@@ -321,22 +266,20 @@ class MapViewModel @Inject constructor(
         }
     }
 
-
-    // Slot Management
     fun updateSlots(slots: List<ChargerSlot>) {
         viewModelScope.launch {
             slots.forEach { slot ->
                 dbRepo.createOrUpdateChargerSlot(slot.stationId, slot)
                     .onFailure { Timber.e("Slot update failed: ${it.message}") }
             }
-            // Refresh affected stations
+
             slots.map { it.stationId }.toSet().forEach { stationId ->
                 _stationSlotsCache.remove(stationId)
             }
+
+            getAllStationsForMap()
         }
     }
-
-
 
     fun searchLocation(query: String, context: Context) {
         viewModelScope.launch {
@@ -355,6 +298,7 @@ class MapViewModel @Inject constructor(
     fun signOutUser() {
         authRepo.signOutUser()
     }
+
     fun isUserAnonymous(): Boolean {
         return authRepo.isUserAnonymous()
     }
@@ -366,6 +310,7 @@ class MapViewModel @Inject constructor(
                 dbRepo.getSlotsForStation(stationId)
                     .onSuccess {
                         _slotLocation.value = UiState.Success(it)
+                        _stationSlotsCache[stationId] = it
                     }
                     .onFailure {
                         _slotLocation.value = UiState.Fail(it.message ?: "Unknown error")
@@ -406,18 +351,13 @@ class MapViewModel @Inject constructor(
     fun reportProblems(slotId: String) {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
-            _damageReports[slotId] = now // Optimistic update
+            _damageReports[slotId] = now
 
             val result = dbRepo.reportDamagedSlot(slotId)
             result.onFailure {
                 Timber.e(it)
-                _damageReports[slotId] = null // Revert if it fails
+                _damageReports[slotId] = null
             }
         }
     }
-
 }
-
-
-
-

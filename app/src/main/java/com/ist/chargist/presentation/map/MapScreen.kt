@@ -92,7 +92,11 @@ fun MapScreen(
     onChargerStationClick: ((ChargerStation) -> Unit)?
 ) {
     val context = LocalContext.current
-    val chargerStationsUiState by viewModel.chargerStationList
+
+    val mapStationsUiState by viewModel.mapStations
+
+    val searchResultsUiState by viewModel.searchResults
+
     val cameraPosition by viewModel.cameraPosition.collectAsState()
     val forceUpdate by viewModel.locationUpdates.collectAsState()
     val activity = context as Activity
@@ -100,21 +104,16 @@ fun MapScreen(
     val isAnonymous = remember { viewModel.isUserAnonymous() }
     val favoriteIds by viewModel.favouriteStationIds
 
-
     var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(searchQuery) {
         viewModel.handleSearchInput(searchQuery)
     }
 
-
     var selectedStation by remember { mutableStateOf<ChargerStation?>(null) }
     var showPanel by remember { mutableStateOf(false) }
-
     var closestStation by remember { mutableStateOf<ChargerStation?>(null) }
-
     var location by remember { mutableStateOf<LatLng?>(null) }
-
 
     // Permission launcher
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -137,8 +136,7 @@ fun MapScreen(
                 Manifest.permission.ACCESS_FINE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED -> {
 
-                // 1. Wait for stations to load
-                viewModel.getChargerStations()
+                viewModel.getAllStationsForMap()
 
                 // 2. Wait for location
                 val locationDeferred = CompletableDeferred<LatLng?>()
@@ -157,11 +155,9 @@ fun MapScreen(
         }
     }
 
-
-
     LaunchedEffect(location) {
         location?.let { userLoc ->
-            val nearbyStation = ((chargerStationsUiState as? UiState.Success)?.data as? List<ChargerStation>)
+            val nearbyStation = ((mapStationsUiState as? UiState.Success)?.data as? List<ChargerStation>)
                 ?.firstOrNull { station ->
                     val stationLoc = LatLng(station.lat.toDouble(), station.lon.toDouble())
                     FloatArray(1).also {
@@ -179,7 +175,6 @@ fun MapScreen(
             }
         }
     }
-
 
     // Map camera control
     val cameraState = rememberCameraPositionState()
@@ -213,29 +208,29 @@ fun MapScreen(
                 myLocationButtonEnabled = false,
                 zoomControlsEnabled = false)
         ){
-            // Existing marker code...
-            when (chargerStationsUiState) {
+
+            when (mapStationsUiState) {
                 is UiState.Success -> {
-                    ((chargerStationsUiState as? UiState.Success)?.data as? List<ChargerStation>)?.forEach { station ->
+                    ((mapStationsUiState as? UiState.Success)?.data as? List<ChargerStation>)?.forEach { station ->
                         val isFavorite = ((favoriteIds as? UiState.Success)?.data as? List<String>?)?.contains(station.id) == true
                         val hue = if (isFavorite) BitmapDescriptorFactory.HUE_YELLOW else BitmapDescriptorFactory.HUE_RED
-                            Marker(
-                                state = MarkerState(
-                                    position = LatLng(station.lat.toDouble(), station.lon.toDouble())
-                                ),
-                                icon = BitmapDescriptorFactory.defaultMarker(hue),
-                                onClick = {
-                                    selectedStation = station
-                                    showPanel = true
-                                    false
-                                }
-                            )
+                        Marker(
+                            state = MarkerState(
+                                position = LatLng(station.lat.toDouble(), station.lon.toDouble())
+                            ),
+                            icon = BitmapDescriptorFactory.defaultMarker(hue),
+                            onClick = {
+                                selectedStation = station
+                                showPanel = true
+                                false
+                            }
+                        )
                     }
                 }
                 is UiState.Fail -> {
                     Toast.makeText(
                         context,
-                        (chargerStationsUiState as UiState.Fail).message,
+                        (mapStationsUiState as UiState.Fail).message,
                         Toast.LENGTH_SHORT
                     ).show()
                     null
@@ -258,7 +253,6 @@ fun MapScreen(
             var sortAscending by remember { mutableStateOf(true) }
             var showChargerStationResults by remember { mutableStateOf(false) }
 
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth(0.9f)
@@ -273,7 +267,12 @@ fun MapScreen(
                     },
                     onSearch = { viewModel.searchLocation(it, context) },
                     active = false,
-                    onActiveChange = { showChargerStationResults = it },
+                    onActiveChange = {
+                        showChargerStationResults = it
+                        if (it) {
+                            viewModel.triggerInitialSearch()
+                        }
+                    },
                     placeholder = { Text("Search stations or location...") },
                     trailingIcon = {
                         IconButton(onClick = { showFilterDialog = true }) {
@@ -344,20 +343,25 @@ fun MapScreen(
                         selectedSort = sort
                         sortAscending = ascending
                         viewModel.applyFiltersAndSort(filters, sort, ascending)
+                        showChargerStationResults = true
                     }
                 )
             }
 
-            // Display search results
             if (showChargerStationResults) {
+                val searchStations = when (val state = searchResultsUiState) {
+                    is UiState.Success -> state.data as? List<ChargerStation> ?: emptyList()
+                    else -> emptyList()
+                }
+
                 StationSearchResults(
-                    stations = viewModel.filteredStations.value, // Access .value here
+                    stations = searchStations,
                     onStationClick = { station ->
                         selectedStation = station
-                        showPanel = false
+                        showPanel = true
                         viewModel.moveToStation(station)
                         searchQuery = ""
-                        showChargerStationResults = false // close results
+                        showChargerStationResults = false
                     },
                     modifier = Modifier
                         .fillMaxWidth(0.9f)
@@ -371,7 +375,6 @@ fun MapScreen(
                 Box(
                     Modifier
                         .fillMaxSize()
-                        // Transparent clickable background to detect outside clicks
                         .clickable(
                             onClick = {
                                 showPanel = false
@@ -381,13 +384,11 @@ fun MapScreen(
                             interactionSource = remember { MutableInteractionSource() }
                         )
                 ) {
-                    // The panel itself - stop click events from propagating outside
                     Box(
                         Modifier
                             .align(Alignment.Center)
                             .clickable(enabled = false) {}
-
-                            .heightIn(max = 400.dp) // adjust max height as needed
+                            .heightIn(max = 400.dp)
                             .verticalScroll(rememberScrollState())
                     ) {
                         val isFavorite = ((favoriteIds as? UiState.Success)?.data as? List<String>?)?.contains(selectedStation!!.id) == true
@@ -397,14 +398,15 @@ fun MapScreen(
                             viewModel = viewModel,
                             isFavorite = isFavorite,
                             onToggleFavorite = { viewModel.toggleFavorite(selectedStation!!.id) },
-                            onDismiss = {     selectedStation = null
-                                showPanel = false }
+                            onDismiss = {
+                                selectedStation = null
+                                showPanel = false
+                            }
                         )
                     }
                 }
             }
         }
-
 
         Column(
             modifier = Modifier
@@ -412,37 +414,31 @@ fun MapScreen(
                 .padding(start = 2.dp, bottom = 50.dp),
             verticalArrangement = Arrangement.Bottom
         ){
-
-            // Add Station FAB
             if (!isAnonymous) {
                 FloatingActionButton(
                     onClick = navigateToAddChargerStation,
-                    modifier = Modifier
-                        .padding(8.dp)
+                    modifier = Modifier.padding(8.dp)
                 ) {
                     Icon(Icons.Default.Add, "Add Station")
                 }
             }
-            // Current Location FAB
+
             FloatingActionButton(
                 onClick = { viewModel.getCurrentLocation{} },
-                modifier = Modifier
-                    .padding(8.dp)
+                modifier = Modifier.padding(8.dp)
             ) {
                 Icon(Icons.Default.MyLocation, "Current Location")
             }
-            // Add Station FAB
+
             FloatingActionButton(
                 onClick = onLogoutClick,
-                modifier = Modifier
-                    .padding(8.dp)
+                modifier = Modifier.padding(8.dp)
             ) {
                 Icon(Icons.AutoMirrored.Filled.Logout, "Logout")
             }
         }
 
         ZoomControls(cameraState)
-
     }
 }
 
@@ -539,9 +535,9 @@ fun StationSearchItem(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "${station.fastPrice?.let { "F: €$it " }} " +
-                        "${station.mediumPrice?.let { "M: €$it " }} " +
-                        "${station.slowPrice?.let { "S: €$it " }}",
+                text = "${station.fastPrice.takeIf { it >= 0 }?.let { "F: €$it " } ?: ""}" +
+                        "${station.mediumPrice.takeIf { it >= 0 }?.let { "M: €$it " } ?: ""}" +
+                        "${station.slowPrice.takeIf { it >= 0 }?.let { "S: €$it " } ?: ""}",
                 style = MaterialTheme.typography.bodySmall
             )
         }

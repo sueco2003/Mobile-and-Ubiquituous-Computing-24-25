@@ -1,7 +1,9 @@
 package com.ist.chargist.domain.repository.firebase
 
+import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
 import com.hocel.assetmanager.utils.DispatcherProvider
 import com.ist.chargist.domain.DatabaseRepository
@@ -21,6 +23,8 @@ import timber.log.Timber
 import javax.inject.Inject
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import android.location.Location
+import com.google.firebase.firestore.FieldPath
 
 class FirebaseRepositoryImpl @Inject constructor(
     private val deviceInfo: DeviceInfoProvider,
@@ -44,6 +48,109 @@ class FirebaseRepositoryImpl @Inject constructor(
     }
 
     private val repositoryScope = CoroutineScope(dispatcherProvider.io())
+
+    override suspend fun getFilteredStations(
+        lastStationID: String,
+        searchQuery: String,
+        filters: List<String>,
+        userLocation: LatLng?
+    ): Result<List<ChargerStation>> {
+        if (!deviceInfo.hasInternetConnection()) {
+            return Result.failure(Throwable(ERROR_NO_INTERNET))
+        }
+
+        Timber.tag("FirebaseRepository")
+            .d("getFilteredStations called with lastStationID: $lastStationID, searchQuery: $searchQuery, filters: $filters, userLocation: $userLocation")
+        val availableSlotsFilter = filters.contains("available")
+        val paymentFilters = filters.filter { it in listOf("credit", "paypal", "cash") }
+        val speedFilters = filters.filter { it in listOf("fast", "medium", "slow") }
+        val orderByPrice = filters.contains("price")
+        val orderByDistance = filters.contains("distance")
+        val direction = filters.filter { it in listOf("ascending", "descending") }.firstOrNull() ?: "descending"
+
+        return try {
+            suspendCoroutine { continuation ->
+                var query: Query = Firebase.firestore.collection(STATIONS_DATABASE)
+
+                if(speedFilters.isNotEmpty())
+                    query = query.whereArrayContainsAny("availableSpeeds", speedFilters)
+
+                if (paymentFilters.isNotEmpty())
+                    query = query.whereArrayContainsAny("payment", paymentFilters)
+
+                if (searchQuery.isNotBlank()) {
+                    query = query
+                        .whereGreaterThanOrEqualTo("name", searchQuery)
+                        .whereLessThanOrEqualTo("name", searchQuery + '\uf8ff')
+                }
+
+                if (availableSlotsFilter) {
+                    query = query.whereEqualTo("availableSlots", true)
+                }
+
+                if (orderByPrice && searchQuery.isBlank())
+                    query = query.orderBy("lowestPrice", computeDirection(direction))
+
+                if(searchQuery.isBlank())
+                    query = query.orderBy(FieldPath.documentId(), Query.Direction.ASCENDING)
+
+                if (lastStationID.isNotEmpty()) {
+                    query = query.startAfter(lastStationID)
+                }
+
+                query.limit(5)
+                    .get()
+                    .addOnSuccessListener { documentSnapshot ->
+                        val stations = documentSnapshot.toObjects(ChargerStationDtoFirebase::class.java)
+                        val chargerStations = stations.map { it.toChargerStation() }
+                        Timber.tag("FirebaseRepository")
+                            .d("FetchedChargerStations: $chargerStations")
+                        var sortedStations = chargerStations
+                        if(!orderByPrice) {
+                            sortedStations = if (orderByDistance && userLocation != null) {
+                                val stationsWithDistance = chargerStations.sortedWith(
+                                    compareBy { calculateDistance(it, userLocation) }
+                                )
+                                if (direction == "descending") stationsWithDistance.reversed() else stationsWithDistance
+                            } else {
+                                chargerStations
+                            }
+                        }
+
+
+                        continuation.resume(Result.success(sortedStations))
+                    }.addOnFailureListener { exception ->
+                        Timber.tag("FirebaseRepository")
+                            .d("Error no fetched stations: $exception")
+                        continuation.resume(Result.failure(exception))
+                    }
+            }
+
+        } catch (e: Exception) {
+            Timber.e(e)
+            Result.failure(e)
+        }
+    }
+
+    private fun calculateDistance(station: ChargerStation, userLocation: LatLng): Double {
+        val results = FloatArray(1)
+        Location.distanceBetween(
+            userLocation.latitude,
+            userLocation.longitude,
+            station.lat.toDouble(),
+            station.lon.toDouble(),
+            results
+        )
+        return results[0].toDouble()
+    }
+
+    private fun computeDirection(direction: String): Query.Direction {
+        return when (direction.lowercase()) {
+            "ascending" -> Query.Direction.ASCENDING
+            "descending" -> Query.Direction.DESCENDING
+            else -> Query.Direction.DESCENDING
+        }
+    }
 
 
     override suspend fun getChargerStations(): Result<List<ChargerStation>> {
@@ -70,6 +177,7 @@ class FirebaseRepositoryImpl @Inject constructor(
         }
     }
 
+
     override suspend fun getSlotsForStation(stationId: String): Result<List<ChargerSlot>> {
         if (!deviceInfo.hasInternetConnection()) {
             return Result.failure(Throwable(ERROR_NO_INTERNET))
@@ -94,7 +202,6 @@ class FirebaseRepositoryImpl @Inject constructor(
         }
     }
 
-
     override suspend fun createOrUpdateChargerStation(
         station: ChargerStation,
         slots: List<ChargerSlot>
@@ -117,6 +224,7 @@ class FirebaseRepositoryImpl @Inject constructor(
         // Now create a new list combining old slotsId + successful ones
         stationToInsert.slotsId = stationToInsert.slotsId + successfulSlotIds
 
+        stationToInsert.availableSlots = stationToInsert.slotsId.isNotEmpty()
 
         return try {
 

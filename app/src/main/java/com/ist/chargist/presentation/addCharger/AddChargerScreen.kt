@@ -213,9 +213,9 @@ private fun AddChargerContent(
                             lat = lat,
                             lon = lon,
                             payment = selectedMethods,
-                            slowPrice = slowPrice.toFloatOrNull() ?: 0.0f,
-                            mediumPrice = mediumPrice.toFloatOrNull() ?: 0.0f,
-                            fastPrice = fastPrice.toFloatOrNull() ?: 0.0f,
+                            slowPrice = slowPrice.toFloatOrNull() ?: -1.0f,
+                            mediumPrice = mediumPrice.toFloatOrNull() ?: -1.0f,
+                            fastPrice = fastPrice.toFloatOrNull() ?: -1.0f,
                             slotId = emptyList()
                         ),
                         chargers

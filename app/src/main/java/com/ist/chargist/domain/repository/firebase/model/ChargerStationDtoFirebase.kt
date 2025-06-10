@@ -10,9 +10,12 @@ data class ChargerStationDtoFirebase(
     val lon : Float = 0.0f,
     val payment : List<String> = emptyList(),
     val imageUri : String = "",
-    val slowPrice : Float = 0.0f,
-    val mediumPrice : Float = 0.0f,
-    val fastPrice : Float = 0.0f,
+    val availableSpeeds: List<String> = emptyList(),
+    val fastPrice: Float = 0.0f,
+    val mediumPrice: Float = 0.0f,
+    val slowPrice: Float = 0.0f,
+    var availableSlots: Boolean = false,
+    var lowestPrice: Float = 0.0f,
     var slotsId : List<String> = emptyList()
 )
 
@@ -23,9 +26,12 @@ fun ChargerStation.toChargerStationDtoFirebase() = ChargerStationDtoFirebase(
     lon = this.lon,
     payment = this.payment,
     imageUri = this.imageUri?.toString() ?: "",
-    slowPrice = this.slowPrice,
+    availableSpeeds = this.availableSpeeds,
+    fastPrice = this.fastPrice,
     mediumPrice = this.mediumPrice,
-    fastPrice = this.fastPrice
+    slowPrice = this.slowPrice,
+    availableSlots = this.availableSlots,
+    lowestPrice = this.lowestPrice,
 )
 
 fun ChargerStationDtoFirebase.toChargerStation() = ChargerStation(
@@ -35,8 +41,11 @@ fun ChargerStationDtoFirebase.toChargerStation() = ChargerStation(
     lon = this.lon,
     payment = this.payment,
     imageUri = this.imageUri,
-    slowPrice = this.slowPrice,
-    mediumPrice = this.mediumPrice,
+    availableSpeeds = this.availableSpeeds,
     fastPrice = this.fastPrice,
+    mediumPrice = this.mediumPrice,
+    slowPrice = this.slowPrice,
+    availableSlots = this.availableSlots,
+    lowestPrice = this.lowestPrice,
     slotId = this.slotsId
 )

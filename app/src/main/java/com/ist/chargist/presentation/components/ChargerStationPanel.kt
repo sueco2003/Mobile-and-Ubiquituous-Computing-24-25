@@ -195,19 +195,19 @@ fun ChargerStationPanel(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text("Prices:", style = MaterialTheme.typography.bodyMedium)
-            station.fastPrice?.let {
+            station.fastPrice.takeIf { it >= 0 }?.let {
                 Text(
                     "Fast: ${it}€",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            station.mediumPrice?.let {
+            station.mediumPrice.takeIf { it >= 0 }?.let {
                 Text(
                     "Medium: ${it}€",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            station.slowPrice?.let {
+            station.slowPrice.takeIf { it >= 0 }?.let {
                 Text(
                     "Slow: ${it}€",
                     style = MaterialTheme.typography.bodySmall
