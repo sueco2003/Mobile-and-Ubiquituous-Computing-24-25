@@ -7,6 +7,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
@@ -44,13 +45,68 @@ class AddChargerViewModel @Inject constructor(
     var onSelectCamera: (() -> Unit)? = null
     var onSelectGallery: (() -> Unit)? = null
 
-    var name by mutableStateOf("")
-    var selectedMethods by mutableStateOf<List<String>>(emptyList())
-    var chargers by mutableStateOf(listOf<ChargerSlot>())
+    // form fields
     var imageUri by mutableStateOf<Uri?>(null)
-    var fastPrice by mutableStateOf("")
-    var mediumPrice by mutableStateOf("")
+        private set
+
+    var name by mutableStateOf("")
+        private set
+
+    var selectedMethods by mutableStateOf<List<String>>(emptyList())
+        private set
+
     var slowPrice by mutableStateOf("")
+        private set
+
+    var mediumPrice by mutableStateOf("")
+        private set
+
+    var fastPrice by mutableStateOf("")
+        private set
+
+    var nearbyServiceText by  mutableStateOf("")
+        private set
+
+    var nearbyServices by mutableStateOf<List<String>>(emptyList())
+
+    var chargingSlots by mutableStateOf(listOf<ChargerSlot>())
+        private set
+
+    fun updateImageUri(newImageUri: Uri) {
+        imageUri = newImageUri
+    }
+
+    fun updateName(newName: String) {
+        name = newName
+    }
+
+    fun updateSelectedMethods(newMethods: List<String>) {
+        selectedMethods = newMethods
+    }
+
+    fun updateSlowPrice(newPrice: String) {
+        slowPrice = newPrice
+    }
+
+    fun updateMediumPrice(newPrice: String) {
+        mediumPrice = newPrice
+    }
+
+    fun updateFastPrice(newPrice: String) {
+        fastPrice = newPrice
+    }
+
+    fun updateNearbyServiceText(newText: String) {
+        nearbyServiceText = newText
+    }
+
+    fun updateNearbyServices(newNearbyServices: List<String>) {
+        nearbyServices = newNearbyServices
+    }
+
+    fun updateChargingSlots(newSlots: List<ChargerSlot>) {
+        chargingSlots = newSlots
+    }
 
     fun createCharger(station: ChargerStation, slots: List<ChargerSlot>) {
         viewModelScope.launch {
@@ -108,11 +164,9 @@ class AddChargerViewModel @Inject constructor(
                 val address = addresses?.firstOrNull()
 
                 if (address != null) {
-                    val lat = address.latitude.toString()
-                    val lon = address.longitude.toString()
-                    _chargerLocation.value = UiState.Success(listOf(lat, lon))
+                    _chargerLocation.value = UiState.Success(Pair(address.latitude, address.longitude))
                 } else {
-                    _chargerLocation.value = UiState.Error("Location not found")
+                    _chargerLocation.value = UiState.Error("Invalid coordinates")
                 }
             } catch (e: Exception) {
                 _chargerLocation.value =
@@ -129,7 +183,7 @@ class AddChargerViewModel @Inject constructor(
                 val location = locationClient.lastLocation.await()
                 if (location != null) {
                     _myLocation.value =
-                        UiState.Success(listOf(location.latitude.toString(), location.longitude.toString()))
+                        UiState.Success(Pair(location.latitude, location.longitude))
                 } else {
                     _myLocation.value = UiState.Error("Location unavailable")
                 }

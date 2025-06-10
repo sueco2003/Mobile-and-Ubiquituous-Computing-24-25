@@ -248,7 +248,7 @@ fun ChargerStationPanel(
                     newSlots += newSlot
                     pendingSlotUpdates[newSlotId] = newSlot
                 }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Add More Chargers", style = MaterialTheme.typography.bodyMedium)
+                    Text("Add More Slots", style = MaterialTheme.typography.bodyMedium)
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))

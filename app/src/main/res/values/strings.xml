@@ -40,7 +40,7 @@
     <string name="charger_add_title">Add Station</string>
     <string name="btn_add_station_button_label">Create station</string>
     <string name="charger_name_label_hint">Station Name</string>
-    <string name="address_label_hint">Station Location/Coordinates</string>
+    <string name="address_label_hint">Station Coordinates</string>
 
     <string name="new_collection_dialog_title">Congratulations!</string>
     <string name="new_location_dialog_subtitle">Your charger has been created!</string>

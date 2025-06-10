@@ -1,13 +1,16 @@
 package com.ist.chargist.presentation.addCharger
 
 import android.Manifest
-import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,9 +31,7 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -145,7 +146,7 @@ fun AddChargerScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun AddChargerContent(
     modifier: Modifier = Modifier,
@@ -166,97 +167,33 @@ private fun AddChargerContent(
     val chargerLocationState = viewModel.chargerLocation
     val myLocationState = viewModel.myLocation
 
-    var name by remember { mutableStateOf("") }
-    var selectedMethods by remember { mutableStateOf<List<String>>(emptyList()) }
-    var slots by remember { mutableStateOf(listOf(ChargerSlot(
-        speed = ChargeSpeed.F,
-        connector = Connector.CCS2,
-        available = true
-    ))) }
-    var imageUri by remember { mutableStateOf<Uri?>(null) }
-    var fastPrice by remember { mutableStateOf("") }
-    var mediumPrice by remember { mutableStateOf("") }
-    var slowPrice by remember { mutableStateOf("") }
-
     val selectedLocation = navController
         .currentBackStackEntry
         ?.savedStateHandle
         ?.getStateFlow<LatLng?>("selected_location", null)
         ?.collectAsState()
 
-    LaunchedEffect(selectedLocation?.value) {
-        selectedLocation?.value?.let { latLng ->
-            locationQuery = "${latLng.latitude}, ${latLng.longitude}"
-        }
-    }
-
-    if (showImageSelectionSheet) {
-        ModalBottomSheet(onDismissRequest = { showImageSelectionSheet = false }) {
-            ImageSelectorSheet(
-                onSelectCamera = onSelectCamera,
-                onSelectGallery = onSelectGallery
-            )
-        }
-    }
-
-    fun handleFormSubmit() {
-        when {
-            name.isBlank() -> Toast.makeText(
-                context,
-                context.getString(R.string.error_input_cannot_be_empty),
-                Toast.LENGTH_SHORT
-            ).show()
-
-            locationQuery.isBlank() -> Toast.makeText(
-                context,
-                "Station location cannot be empty",
-                Toast.LENGTH_SHORT
-            ).show()
-
-            !isValidPriceString(slowPrice) || !isValidPriceString(mediumPrice) || !isValidPriceString(
-                fastPrice
-            ) -> Toast.makeText(
-                context,
-                "Prices need to be positive numbers",
-                Toast.LENGTH_SHORT
-            ).show()
-
-            slots.isEmpty() -> Toast.makeText(
-                context,
-                "Station must contain at least one slot",
-                Toast.LENGTH_SHORT
-            ).show()
-
-            else -> {
-                viewModel.searchLocation(
-                    query = locationQuery,
-                    context = context
-                )
-            }
-        }
-    }
-
     LaunchedEffect(chargerLocationState.value) {
         when (val state = chargerLocationState.value) {
             is UiState.Success -> {
-                val locationStrings = state.data as? List<String>
-                val lat = locationStrings?.getOrNull(0)?.toFloatOrNull()
-                val lon = locationStrings?.getOrNull(1)?.toFloatOrNull()
+                val location = state.data as? Pair<Double, Double>
+                val lat = location?.first
+                val lon = location?.second
 
                 if (lat != null && lon != null) {
                     viewModel.createCharger(
                         ChargerStation(
-                            name = name.trim(),
-                            imageUri = imageUri?.toString(),
-                            lat = lat,
-                            lon = lon,
-                            payment = selectedMethods,
-                            slowPrice = slowPrice.toFloatOrNull() ?: 0.0f,
-                            mediumPrice = mediumPrice.toFloatOrNull() ?: 0.0f,
-                            fastPrice = fastPrice.toFloatOrNull() ?: 0.0f,
+                            name = viewModel.name.trim(),
+                            imageUri = viewModel.imageUri?.toString(),
+                            lat = lat.toFloat(),
+                            lon = lon.toFloat(),
+                            payment = viewModel.selectedMethods,
+                            slowPrice = viewModel.slowPrice.toFloatOrNull() ?: 0.0f,
+                            mediumPrice = viewModel.mediumPrice.toFloatOrNull() ?: 0.0f,
+                            fastPrice = viewModel.fastPrice.toFloatOrNull() ?: 0.0f,
                             slotId = emptyList()
                         ),
-                        slots
+                        viewModel.chargingSlots
                     )
                 }
                 else {
@@ -273,17 +210,69 @@ private fun AddChargerContent(
     LaunchedEffect(myLocationState.value) {
         when (val state = myLocationState.value) {
             is UiState.Success -> {
-                val locationStrings = state.data as? List<String>
-                val lat = locationStrings?.getOrNull(0)
-                val lon = locationStrings?.getOrNull(1)
+                val locationStrings = state.data as? Pair<Double, Double>
+                val lat = locationStrings?.first
+                val lon = locationStrings?.second
                 if (lat != null && lon != null) {
-                    locationQuery = "$lat, $lon"
+                    locationQuery = "%.4f, %.4f".format(lat, lon)
                 }
             }
             is UiState.Error -> {
                 Toast.makeText(context, state.message ?: "Invalid address", Toast.LENGTH_SHORT).show()
             }
             else -> { }
+        }
+    }
+
+    LaunchedEffect(selectedLocation?.value) {
+        selectedLocation?.value?.let { latLng ->
+            locationQuery = "%.4f, %.4f".format(latLng.latitude, latLng.longitude)
+        }
+    }
+
+    fun handleFormSubmit() {
+        when {
+            viewModel.name.isBlank() -> Toast.makeText(
+                context,
+                context.getString(R.string.error_input_cannot_be_empty),
+                Toast.LENGTH_SHORT
+            ).show()
+
+            locationQuery.isBlank() -> Toast.makeText(
+                context,
+                "Station location cannot be empty",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            !isValidPriceString(viewModel.slowPrice) ||
+                    !isValidPriceString(viewModel.mediumPrice) ||
+                    !isValidPriceString(viewModel.fastPrice) -> Toast.makeText(
+                context,
+                "Prices need to be positive numbers",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            viewModel.chargingSlots.isEmpty() -> Toast.makeText(
+                context,
+                "Station must contain at least one slot",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            else -> {
+                viewModel.searchLocation(
+                    query = locationQuery,
+                    context = context
+                )
+            }
+        }
+    }
+
+    if (showImageSelectionSheet) {
+        ModalBottomSheet(onDismissRequest = { showImageSelectionSheet = false }) {
+            ImageSelectorSheet(
+                onSelectCamera = onSelectCamera,
+                onSelectGallery = onSelectGallery
+            )
         }
     }
 
@@ -304,16 +293,16 @@ private fun AddChargerContent(
                 },
                 onImageChosen = {
                     showImageSelectionSheet = false
-                    imageUri = it
+                    viewModel.updateImageUri(it)
                 },
-                imageUriSaved = imageUri
+                imageUriSaved = viewModel.imageUri
             )
         }
 
         item {
             OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
+                value = viewModel.name,
+                onValueChange = { viewModel.updateName(it) },
                 label = {
                     Text(
                         text = stringResource(R.string.charger_name_label_hint),
@@ -370,7 +359,7 @@ private fun AddChargerContent(
                             contentDescription = "Pick on Map"
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Pick from Map")
+                        Text("Pick on Map")
                     }
                 }
             }
@@ -394,23 +383,23 @@ private fun AddChargerContent(
                 ) {
                     PaymentMethodButton(
                         label = "Cash",
-                        isSelected = "cash" in selectedMethods,
+                        isSelected = "cash" in viewModel.selectedMethods,
                         onClick = {
-                            selectedMethods = selectedMethods.toggle("cash")
+                            viewModel.updateSelectedMethods(viewModel.selectedMethods.toggle("cash"))
                         }
                     )
                     PaymentMethodButton(
                         label = "Credit Card",
-                        isSelected = "credit" in selectedMethods,
+                        isSelected = "credit" in viewModel.selectedMethods,
                         onClick = {
-                            selectedMethods = selectedMethods.toggle("credit")
+                            viewModel.updateSelectedMethods(viewModel.selectedMethods.toggle("credit"))
                         }
                     )
                     PaymentMethodButton(
                         label = "PayPal",
-                        isSelected = "paypal" in selectedMethods,
+                        isSelected = "paypal" in viewModel.selectedMethods,
                         onClick = {
-                            selectedMethods = selectedMethods.toggle("paypal")
+                            viewModel.updateSelectedMethods(viewModel.selectedMethods.toggle("paypal"))
                         }
                     )
                 }
@@ -434,26 +423,104 @@ private fun AddChargerContent(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
-                        value = slowPrice,
-                        onValueChange = { slowPrice = it },
-                        label = { Text("Slow") },
+                        value = viewModel.slowPrice,
+                        onValueChange = { viewModel.updateSlowPrice(it) },
+                        label = {
+                            Text("Slow", color = MutedTextColor)
+                        },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f).height(50.dp)
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp)
                     )
                     OutlinedTextField(
-                        value = mediumPrice,
-                        onValueChange = { mediumPrice = it },
-                        label = { Text("Medium") },
+                        value = viewModel.mediumPrice,
+                        onValueChange = { viewModel.updateMediumPrice(it) },
+                        label = {
+                            Text("Medium", color = MutedTextColor)
+                        },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f).height(50.dp)
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp)
                     )
                     OutlinedTextField(
-                        value = fastPrice,
-                        onValueChange = { fastPrice = it },
-                        label = { Text("Fast") },
+                        value = viewModel.fastPrice,
+                        onValueChange = { viewModel.updateFastPrice(it) },
+                        label = {
+                            Text("Fast", color = MutedTextColor)
+                        },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f).height(50.dp)
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp)
                     )
+                }
+            }
+        }
+
+        item {
+            Column (
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = "Nearby Services",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = viewModel.nearbyServiceText,
+                        onValueChange = { viewModel.updateNearbyServiceText(it) },
+                        modifier = Modifier.weight(1f),
+                        label = { Text("Service Name", color = MutedTextColor) },
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    Button(
+                        onClick = {
+                            if (viewModel.nearbyServiceText.isNotBlank()) {
+                                viewModel.updateNearbyServices(viewModel.nearbyServices + viewModel.nearbyServiceText)
+                                viewModel.updateNearbyServiceText("")
+                            }
+                        },
+                        modifier = Modifier.height(56.dp)
+                    ) {
+                        Text("Add")
+                    }
+                }
+                if (viewModel.nearbyServices.isNotEmpty()) {
+                    FlowRow (
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        viewModel.nearbyServices.forEach { service ->
+                            Box(
+                                modifier = Modifier
+                                    .background(color = ISTBlue.copy(alpha = 0.9f), shape = RoundedCornerShape(16.dp))
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .padding(12.dp, 8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(text = service, color = Color.White)
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Remove",
+                                        tint = Color.White,
+                                        modifier = Modifier
+                                            .height(20.dp)
+                                            .clickable{ viewModel.updateNearbyServices(viewModel.nearbyServices - service) }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -474,17 +541,19 @@ private fun AddChargerContent(
                         fontWeight = FontWeight.Medium
                     )
                     IconButton(onClick = {
-                        slots = slots + ChargerSlot(
-                            speed = ChargeSpeed.F,
-                            connector = Connector.CCS2,
-                            available = true
+                        viewModel.updateChargingSlots(
+                            viewModel.chargingSlots + ChargerSlot(
+                                speed = ChargeSpeed.F,
+                                connector = Connector.CCS2,
+                                available = true
+                            )
                         )
                     }) {
                         Icon(Icons.Default.Add, contentDescription = "Add Charger")
                     }
                 }
 
-                slots.forEachIndexed { index, charger ->
+                viewModel.chargingSlots.forEachIndexed { index, charger ->
                     Column(
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier
@@ -504,7 +573,9 @@ private fun AddChargerContent(
                             )
                             IconButton(
                                 onClick = {
-                                    slots = slots.toMutableList().also { it.removeAt(index) }
+                                    viewModel.updateChargingSlots(
+                                        viewModel.chargingSlots.toMutableList().also { it.removeAt(index) }
+                                    )
                                 }
                             ) {
                                 Icon(
@@ -528,9 +599,11 @@ private fun AddChargerContent(
                                     val selected = speed == charger.speed
                                     OutlinedButton(
                                         onClick = {
-                                            slots = slots.mapIndexed { i, c ->
-                                                if (i == index) c.copy(speed = speed) else c
-                                            }
+                                            viewModel.updateChargingSlots(
+                                                viewModel.chargingSlots.mapIndexed { i, c ->
+                                                    if (i == index) c.copy(speed = speed) else c
+                                                }
+                                            )
                                         },
                                         colors = ButtonDefaults.outlinedButtonColors(
                                             containerColor = if (selected)
@@ -557,9 +630,11 @@ private fun AddChargerContent(
                                     val selected = conn == charger.connector
                                     OutlinedButton(
                                         onClick = {
-                                            slots = slots.mapIndexed { i, c ->
-                                                if (i == index) c.copy(connector = conn) else c
-                                            }
+                                            viewModel.updateChargingSlots(
+                                                viewModel.chargingSlots.mapIndexed { i, c ->
+                                                    if (i == index) c.copy(connector = conn) else c
+                                                }
+                                            )
                                         },
                                         colors = ButtonDefaults.outlinedButtonColors(
                                             containerColor = if (selected)
@@ -614,7 +689,7 @@ private fun AddChargerContent(
 }
 
 private fun isValidPriceString(priceString: String): Boolean {
-    if (priceString.isBlank()) return true; // no price provided is valid
+    if (priceString.isBlank()) return true // no price provided is valid
     val price = priceString.toFloatOrNull()
     return price != null && price >= 0
 }
