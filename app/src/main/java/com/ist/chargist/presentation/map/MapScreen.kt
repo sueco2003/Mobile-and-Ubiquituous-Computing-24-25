@@ -1,6 +1,5 @@
 package com.ist.chargist.presentation.map
 
-import android.util.Log
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
@@ -34,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -71,8 +71,10 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.CameraPositionState
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapEffect
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.MapsComposeExperimentalApi
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
@@ -85,7 +87,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.size
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, MapsComposeExperimentalApi::class)
 @Composable
 fun MapScreen(
     viewModel: MapViewModel = viewModel(),
@@ -117,7 +119,7 @@ fun MapScreen(
     var selectedStationId by remember { mutableStateOf("") }
     var showPanel by remember { mutableStateOf(false) }
     var closestStation by remember { mutableStateOf<ChargerStation?>(null) }
-    var location by remember { mutableStateOf<LatLng?>(null) }
+    var userLocation by viewModel.userLocation
 
     // Permission launcher
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -139,17 +141,17 @@ fun MapScreen(
                 context,
                 Manifest.permission.ACCESS_FINE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED -> {
+                viewModel.getAllKnownStations()
 
-                viewModel.getAllStationsForMap()
-
-                // 2. Wait for location
+                // get user location
                 val locationDeferred = CompletableDeferred<LatLng?>()
                 viewModel.getCurrentLocation { latLng ->
                     locationDeferred.complete(latLng)
                 }
-                location = locationDeferred.await()
+                locationDeferred.await()
 
-                // 3. Then fetch favorites
+                // nearby stations based on location
+                viewModel.getNearbyStations()
                 viewModel.getFavorites()
             }
 
@@ -159,8 +161,8 @@ fun MapScreen(
         }
     }
 
-    LaunchedEffect(location) {
-        location?.let { userLoc ->
+    LaunchedEffect(userLocation, mapStationsUiState) {
+        userLocation?.let { userLoc ->
             val nearbyStation = ((mapStationsUiState as? UiState.Success)?.data as? List<ChargerStation>)
                 ?.firstOrNull { station ->
                     val stationLoc = LatLng(station.lat.toDouble(), station.lon.toDouble())
@@ -172,7 +174,6 @@ fun MapScreen(
                         )
                     }[0] <= 1000
                 }
-
             if (nearbyStation != closestStation) {
                 closestStation = nearbyStation
                 showPanel = true
@@ -211,7 +212,6 @@ fun MapScreen(
                 myLocationButtonEnabled = false,
                 zoomControlsEnabled = false)
         ){
-
             when (mapStationsUiState) {
                 is UiState.Success -> {
                     ((mapStationsUiState as? UiState.Success)?.data as? List<ChargerStation>)?.forEach { station ->
@@ -243,6 +243,18 @@ fun MapScreen(
                 UiState.Idle,
                 UiState.Loading -> {
                     null
+                }
+            }
+
+            // on wifi, trigger getNearbyStations every time map is moved to a new stable position
+            MapEffect (Unit) { map ->
+                map.setOnCameraIdleListener {
+                    val currentZoom = cameraState.position.zoom
+                    val newPosition = cameraState.position.target
+
+                    if (currentZoom >= 4 && viewModel.isOnWifi()) {
+                        viewModel.triggerGetNearbyStations(newPosition)
+                    }
                 }
             }
         }
@@ -436,6 +448,13 @@ fun MapScreen(
                 .padding(start = 2.dp, bottom = 50.dp),
             verticalArrangement = Arrangement.Bottom
         ){
+            FloatingActionButton(
+                onClick = { viewModel.triggerGetNearbyStations(cameraState.position.target) },
+                modifier = Modifier.padding(8.dp)
+            ) {
+                Icon(Icons.Default.Refresh, "Get nearby stations at this location")
+            }
+
             if (!isAnonymous) {
                 FloatingActionButton(
                     onClick = navigateToAddChargerStation,
@@ -512,8 +531,6 @@ fun ZoomControls(
         }
     }
 }
-
-
 
 @Composable
 fun StationSearchResults(

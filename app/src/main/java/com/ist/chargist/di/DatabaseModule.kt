@@ -29,7 +29,6 @@ object DatabaseModule {
         if (appFeatures.contains(Feature.Database(FeatureOption.DatabaseType.Firebase))) {
             return FirebaseRepositoryImpl(
                 deviceInfo = deviceInfo,
-                imageRepository = imageRepository,
                 dispatcherProvider = dispatcherProvider
             )
         }

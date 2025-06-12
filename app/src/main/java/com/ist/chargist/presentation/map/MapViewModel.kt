@@ -2,8 +2,7 @@ package com.ist.chargist.presentation.map
 
 import android.content.Context
 import android.location.Geocoder
-import android.location.Location
-import android.util.Log
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -16,7 +15,7 @@ import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.maps.model.LatLng
 import com.ist.chargist.domain.AuthenticationRepository
 import com.ist.chargist.domain.DatabaseRepository
-import com.ist.chargist.domain.model.ChargeSpeed
+import com.ist.chargist.domain.DeviceInfoProvider
 import com.ist.chargist.domain.model.ChargerSlot
 import com.ist.chargist.domain.model.ChargerStation
 import com.ist.chargist.utils.UiState
@@ -31,10 +30,14 @@ import javax.inject.Inject
 
 @HiltViewModel
 class MapViewModel @Inject constructor(
+    private val deviceInfo: DeviceInfoProvider,
     private val authRepo: AuthenticationRepository,
     private val dbRepo: DatabaseRepository,
     private val locationClient: FusedLocationProviderClient
 ) : ViewModel() {
+    private val _userLocation = mutableStateOf<LatLng?>(null)
+    val userLocation: MutableState<LatLng?> get() = _userLocation
+
     private val _selectedStation = mutableStateOf<UiState>(UiState.Idle)
     val selectedStation: State<UiState> get() = _selectedStation
 
@@ -66,7 +69,6 @@ class MapViewModel @Inject constructor(
     private val _activeFilters = mutableStateListOf<String>()
     private var _selectedSort by mutableStateOf("distance")
     private var _sortAscending by mutableStateOf(true)
-    private val _userLocation = mutableStateOf<LatLng?>(null)
 
     private var _searchLastStation = ChargerStation()
     private var _isLoadingMoreSearch = mutableStateOf(false)
@@ -77,16 +79,34 @@ class MapViewModel @Inject constructor(
     val isLoadingMoreSearch: State<Boolean> get() = _isLoadingMoreSearch
     val hasMoreSearchData: State<Boolean> get() = _hasMoreSearchData
 
-    suspend fun getAllStationsForMap() {
+    suspend fun getAllKnownStations() {
         _mapStations.value = UiState.Loading
         try {
-            dbRepo.getChargerStations().onSuccess { stations ->
+            dbRepo.getAllKnownStations().onSuccess { stations ->
                 _mapStations.value = UiState.Success(stations)
             }.onFailure { error ->
                 _mapStations.value = UiState.Fail(error.message ?: "Unknown error")
             }
         } catch (e: Exception) {
             _mapStations.value = UiState.Fail(e.message ?: "Loading failed")
+        }
+    }
+
+    fun triggerGetNearbyStations(position: LatLng) {
+        viewModelScope.launch {
+            getNearbyStations(position)
+        }
+    }
+
+    suspend fun getNearbyStations(position: LatLng? = null) {
+        try {
+            val pos = position ?: userLocation.value
+            if (pos != null) {
+                dbRepo.getNearbyStations(pos, 1000.0).onSuccess {
+                    getAllKnownStations()
+                }
+            }
+        } catch (_: Exception) {
         }
     }
 
@@ -120,6 +140,7 @@ class MapViewModel @Inject constructor(
                     // IMPORTANT: Always update the UI state with the complete list
                     _searchResults.value = UiState.Success(_allSearchResults.toList())
                 }
+                getAllKnownStations()
             }.onFailure { error ->
                 if (!isLoadingMore) {
                     _searchResults.value = UiState.Fail(error.message ?: "Unknown error")
@@ -224,6 +245,9 @@ class MapViewModel @Inject constructor(
             _favouriteStationIds.value = UiState.Success(updatedFavorites)
 
             dbRepo.toggleFavorite(uid, stationId)
+                .onSuccess {
+                    getAllKnownStations()
+                }
                 .onFailure {
                     _errors.emit("Favorite update failed: ${it.message}")
                     getFavorites()
@@ -277,7 +301,7 @@ class MapViewModel @Inject constructor(
                 dbRepo.createOrUpdateChargerSlot(slot.stationId, slot)
                     .onFailure { Timber.e("Slot update failed: ${it.message}") }
             }
-            getAllStationsForMap()
+            getAllKnownStations()
         }
     }
 
@@ -314,6 +338,7 @@ class MapViewModel @Inject constructor(
                 dbRepo.getChargerStation(stationId)
                     .onSuccess { station ->
                         _selectedStation.value = UiState.Success(station)
+                        getAllKnownStations()
                     }
                     .onFailure {
                         _selectedStation.value = UiState.Fail(it.message ?: "Failed to fetch station")
@@ -331,6 +356,7 @@ class MapViewModel @Inject constructor(
                 dbRepo.getSlotsForStation(stationId)
                     .onSuccess {
                         _slotLocation.value = UiState.Success(it)
+                        getAllKnownStations()
                     }
                     .onFailure {
                         _slotLocation.value = UiState.Fail(it.message ?: "Unknown error")
@@ -349,6 +375,7 @@ class MapViewModel @Inject constructor(
             val result = dbRepo.getLatestDamageReportTimestamp(slotId)
             result.onSuccess { timestamp ->
                 _damageReports[slotId] = timestamp
+                getAllKnownStations()
             }.onFailure {
                 Timber.e(it)
                 _damageReports[slotId] = null
@@ -361,6 +388,7 @@ class MapViewModel @Inject constructor(
             val result = dbRepo.fixSlot(slotId)
             result.onSuccess {
                 _damageReports[slotId] = null
+                getAllKnownStations()
             }.onFailure {
                 Timber.e(it)
                 _damageReports[slotId] = null
@@ -389,6 +417,7 @@ class MapViewModel @Inject constructor(
             dbRepo.getUserRatingForStation(userId, stationId)
                 .onSuccess { rating ->
                     _userRatings[stationId] = rating
+                    getAllKnownStations()
                 }
                 .onFailure { error ->
                     Timber.e("Failed to get user rating: ${error.message}")
@@ -397,30 +426,24 @@ class MapViewModel @Inject constructor(
     }
 
     fun submitRating(stationId: String, rating: Int) {
-        Log.d("MapViewModel", "submitRating called - stationId: $stationId, rating: $rating")
-
         viewModelScope.launch {
             try {
                 val userId = authRepo.getCurrentUser().uid
-                Log.d("MapViewModel", "User ID: $userId")
 
                 dbRepo.submitStationRating(userId, stationId, rating)
                     .onSuccess {
-                        Log.d("MapViewModel", "Rating submitted successfully")
                         _userRatings[stationId] = rating
-                        Log.d("MapViewModel", "Updated local rating cache: ${_userRatings[stationId]}")
-
-                        // Refresh stations to get updated ratings
-                        getAllStationsForMap()
-                        Log.d("MapViewModel", "Triggered map refresh")
+                        getAllKnownStations()
                     }
                     .onFailure { error ->
-                        Log.e("MapViewModel", "Failed to submit rating: ${error.message}")
                         _errors.emit("Failed to submit rating: ${error.message}")
                     }
             } catch (e: Exception) {
-                Log.e("MapViewModel", "Exception in submitRating: ${e.message}", e)
             }
         }
+    }
+
+    fun isOnWifi(): Boolean {
+        return deviceInfo.isOnWifi()
     }
 }

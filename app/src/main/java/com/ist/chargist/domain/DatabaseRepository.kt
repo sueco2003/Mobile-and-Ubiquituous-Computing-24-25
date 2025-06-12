@@ -12,8 +12,8 @@ interface DatabaseRepository {
         filters: List<String> = emptyList(),
         userLocation: LatLng? = null,
     ): Result<List<ChargerStation>>
-    suspend fun getChargerStations() : Result<List<ChargerStation>>
-    suspend fun getNearbyStations(lat: Double, lon: Double): Result<List<ChargerStation>>
+    suspend fun getAllKnownStations(): Result<List<ChargerStation>>
+    suspend fun getNearbyStations(position: LatLng, radius: Double = 100.0): Result<List<ChargerStation>>
     suspend fun getChargerStation(stationId: String) : Result<ChargerStation>
     suspend fun createOrUpdateChargerStation(station: ChargerStation, slots: List<ChargerSlot>): Result<List<ChargerStation>>
     suspend fun createOrUpdateChargerSlot(stationId: String, slot: ChargerSlot) : Result<String>

@@ -24,17 +24,14 @@ import javax.inject.Inject
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import android.location.Location
-import android.util.Log
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import com.google.firebase.firestore.FieldPath
-import com.google.firebase.firestore.toObject
-import kotlin.math.cos
 import com.ist.chargist.domain.model.StationRating
 
 class FirebaseRepositoryImpl @Inject constructor(
     private val deviceInfo: DeviceInfoProvider,
-    private val imageRepository: ImageRepository,
     private val dispatcherProvider: DispatcherProvider
 ) : DatabaseRepository {
     companion object {
@@ -71,7 +68,7 @@ class FirebaseRepositoryImpl @Inject constructor(
             return Result.failure(Throwable(ERROR_NO_INTERNET))
         }
 
-        Timber.tag("FirebaseRepository")
+        Timber.tag("FirebaseRepositoryImpl")
             .d("getFilteredStations called with lastStationID: $lastStation, searchQuery: $searchQuery, filters: $filters, userLocation: $userLocation")
         val availableSlotsFilter = filters.contains("available")
         val paymentFilters = filters.filter { it in listOf("credit", "paypal", "cash") }
@@ -117,6 +114,10 @@ class FirebaseRepositoryImpl @Inject constructor(
                     .addOnSuccessListener { documentSnapshot ->
                         val stations = documentSnapshot.toObjects(ChargerStationDtoFirebase::class.java)
                         val chargerStations = stations.map { it.toChargerStation() }
+
+                        // add to cache
+                        chargerStations.forEach { _stations[it.id] = it }
+
                         Timber.tag("FirebaseRepository")
                             .d("FetchedChargerStations: ${chargerStations.size}")
                         Timber.tag("FirebaseRepository")
@@ -169,57 +170,23 @@ class FirebaseRepositoryImpl @Inject constructor(
         }
     }
 
-
-    override suspend fun getChargerStations(): Result<List<ChargerStation>> {
-        // TODO: could implement the logic of fresh fetch if connected to wifi
-        if (_stations.isNotEmpty()) {
-            return Result.success(_stations.values.toList())
-        }
-
-        if (!deviceInfo.hasInternetConnection()) {
-            return Result.failure(Throwable(ERROR_NO_INTERNET))
-        }
-
-        Timber.tag("FirebaseRepositoryImpl").i("fetching charger stations")
-        return try {
-            suspendCoroutine { continuation ->
-                Firebase.firestore
-                    .collection(STATIONS_DATABASE)
-                    .get()
-                    .addOnSuccessListener { documentSnapshot ->
-                        val stations = documentSnapshot
-                            .toObjects(ChargerStationDtoFirebase::class.java)
-                            .map { it.toChargerStation() }
-
-                        _stations.clear()
-                        stations.forEach { station ->
-                            _stations[station.id] = station
-                        }
-
-                        continuation.resume(Result.success(stations))
-                    }
-                    .addOnFailureListener { exception ->
-                        continuation.resume(Result.failure(exception))
-                    }
-            }
-        } catch (e: Exception) {
-            Timber.e(e)
-            Result.failure(e)
-        }
+    override suspend fun getAllKnownStations(): Result<List<ChargerStation>> {
+        return Result.success(_stations.values.toList())
     }
 
-    override suspend fun getNearbyStations(lat: Double, lon: Double): Result<List<ChargerStation>> {
+    override suspend fun getNearbyStations(position: LatLng, radius: Double): Result<List<ChargerStation>> {
         if (!deviceInfo.hasInternetConnection()) {
             return Result.failure(Throwable(ERROR_NO_INTERNET))
         }
 
-        val radiusDegree = 1.0 // 1 degree is roughly 111km
+        val radiusDegree = radius / 111 // 1 degree is roughly 111km
 
-        val minLat = lat - radiusDegree
-        val maxLat = lat + radiusDegree
-        val minLon = lon - radiusDegree
-        val maxLon = lon + radiusDegree
+        val minLat = position.latitude - radiusDegree
+        val maxLat = position.latitude + radiusDegree
+        val minLon = position.longitude - radiusDegree
+        val maxLon = position.longitude + radiusDegree
 
+        Timber.tag("FirebaseRepositoryImpl").i("fetching nearby charger stations for lat: ${position.latitude}, lon: ${position.longitude}, radius: $radius")
         return try {
             suspendCoroutine { continuation ->
                 Firebase.firestore
@@ -233,8 +200,24 @@ class FirebaseRepositoryImpl @Inject constructor(
                         val stations = snapshot.toObjects(ChargerStationDtoFirebase::class.java)
                             .map { it.toChargerStation() }
 
+                        // ids of stations returned
+                        val fetchedIds = stations.map { it.id }.toSet()
+
                         // update cache
                         stations.forEach { _stations[it.id] = it }
+
+                        // remove cached stations within this range that don't exist anymore
+                        val keysToRemove = _stations.filter { (_, station) ->
+                            station.lat.toDouble() in minLat..maxLat &&
+                                    station.lon.toDouble() in minLon..maxLon &&
+                                    station.id !in fetchedIds
+                        }.keys
+
+                        keysToRemove.forEach {
+                            _stations.remove(it)
+                            _slots.remove(it)
+                            _favourites.remove(it)
+                        }
 
                         continuation.resume(Result.success(stations))
                     }
@@ -269,6 +252,9 @@ class FirebaseRepositoryImpl @Inject constructor(
                             ?.toChargerStation()
 
                         if (station == null) {
+                            _stations.remove(stationId)
+                            _slots.remove(stationId)
+                            _favourites.remove(stationId)
                             continuation.resume(Result.failure(Throwable("Charger station not found")))
                             return@addOnSuccessListener
                         }
@@ -351,7 +337,7 @@ class FirebaseRepositoryImpl @Inject constructor(
                     .addOnCompleteListener {
                         val updatedStation = stationToInsert.toChargerStation()
                         _stations[updatedStation.id] = updatedStation
-                        continuation.resume(Result.success(listOf(updatedStation))) // TODO: why list
+                        continuation.resume(Result.success(listOf(updatedStation)))
                     }
                     .addOnFailureListener { exception ->
                         continuation.resume(Result.failure(exception))

@@ -26,4 +26,15 @@ class DeviceInfoProviderImpl @Inject constructor(
             else -> false
         }
     }
+
+    override fun isOnWifi(): Boolean {
+        val connectivityManager = ContextCompat
+            .getSystemService(application, ConnectivityManager::class.java)
+            ?: return false
+
+        val activeNetwork = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
+
+        return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+    }
 }
