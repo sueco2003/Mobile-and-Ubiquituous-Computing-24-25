@@ -2,7 +2,6 @@ package com.ist.chargist.domain.model
 
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
-import kotlin.math.min
 
 @Parcelize
 data class ChargerStation(
@@ -22,10 +21,21 @@ data class ChargerStation(
         if (slowPrice >= 0) speeds.add("slow")
         speeds
     },
-    val lowestPrice: Float = listOf(fastPrice, mediumPrice, slowPrice).filter { it >= 0 }.min(),
+    val lowestPrice: Float = listOf(fastPrice, mediumPrice, slowPrice).filter { it >= 0 }.minOrNull() ?: 0.0f,
     val availableSlots: Boolean = false,
     val nearbyServices: List<String> = emptyList(),
     val slotId: List<String> = emptyList(),
-) : Parcelable
+    val ratings: Map<String, Int> = emptyMap(),
+    val averageRating: Float = 0.0f,
+    val totalRatings: Int = 0,
+) : Parcelable {
 
-
+    fun calculateAverageRating(): Float {
+        if (ratings.isEmpty()) return 0.0f
+        val totalScore = ratings.entries.sumOf { (key, value) ->
+            key.toIntOrNull()?.times(value) ?: 0
+        }
+        val totalCount = ratings.values.sum()
+        return if (totalCount > 0) totalScore.toFloat() / totalCount else 0.0f
+    }
+}

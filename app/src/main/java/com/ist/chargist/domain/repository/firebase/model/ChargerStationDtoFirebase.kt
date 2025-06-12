@@ -17,7 +17,10 @@ data class ChargerStationDtoFirebase(
     var availableSlots: Boolean = false,
     var lowestPrice: Float = 0.0f,
     val nearbyServices: List<String> = emptyList(),
-    var slotsId : List<String> = emptyList()
+    var slotsId : List<String> = emptyList(),
+    val ratings: Map<String, Int> = emptyMap(),
+    val averageRating: Float = 0.0f,
+    val totalRatings: Int = 0
 )
 
 fun ChargerStation.toChargerStationDtoFirebase() = ChargerStationDtoFirebase(
@@ -33,7 +36,11 @@ fun ChargerStation.toChargerStationDtoFirebase() = ChargerStationDtoFirebase(
     slowPrice = this.slowPrice,
     availableSlots = this.availableSlots,
     lowestPrice = this.lowestPrice,
-    nearbyServices = this.nearbyServices
+    nearbyServices = this.nearbyServices,
+    slotsId = this.slotId,
+    ratings = this.ratings.mapKeys { it.key },
+    averageRating = this.averageRating,
+    totalRatings = this.totalRatings
 )
 
 fun ChargerStationDtoFirebase.toChargerStation() = ChargerStation(
@@ -50,5 +57,8 @@ fun ChargerStationDtoFirebase.toChargerStation() = ChargerStation(
     availableSlots = this.availableSlots,
     lowestPrice = this.lowestPrice,
     nearbyServices = this.nearbyServices,
-    slotId = this.slotsId
+    slotId = this.slotsId,
+    ratings = this.ratings.mapKeys { it.key },
+    averageRating = this.averageRating,
+    totalRatings = this.totalRatings
 )

@@ -56,6 +56,9 @@ class MapViewModel @Inject constructor(
     private val _forceLocationUpdate = MutableStateFlow(0)
     val locationUpdates = _forceLocationUpdate.asStateFlow()
 
+    private val _userRatings = mutableStateMapOf<String, Int?>()
+    val userRatings: Map<String, Int?> get() = _userRatings
+
     // Search & Filter State - Only affects search results
     private val _searchQuery = mutableStateOf("")
     private val _activeFilters = mutableStateListOf<String>()
@@ -357,6 +360,49 @@ class MapViewModel @Inject constructor(
             result.onFailure {
                 Timber.e(it)
                 _damageReports[slotId] = null
+            }
+        }
+    }
+
+    fun getUserRatingForStation(stationId: String) {
+        if (isUserAnonymous()) return
+
+        viewModelScope.launch {
+            val userId = authRepo.getCurrentUser().uid
+            dbRepo.getUserRatingForStation(userId, stationId)
+                .onSuccess { rating ->
+                    _userRatings[stationId] = rating
+                }
+                .onFailure { error ->
+                    Timber.e("Failed to get user rating: ${error.message}")
+                }
+        }
+    }
+
+    fun submitRating(stationId: String, rating: Int) {
+        Log.d("MapViewModel", "submitRating called - stationId: $stationId, rating: $rating")
+
+        viewModelScope.launch {
+            try {
+                val userId = authRepo.getCurrentUser().uid
+                Log.d("MapViewModel", "User ID: $userId")
+
+                dbRepo.submitStationRating(userId, stationId, rating)
+                    .onSuccess {
+                        Log.d("MapViewModel", "Rating submitted successfully")
+                        _userRatings[stationId] = rating
+                        Log.d("MapViewModel", "Updated local rating cache: ${_userRatings[stationId]}")
+
+                        // Refresh stations to get updated ratings
+                        getAllStationsForMap()
+                        Log.d("MapViewModel", "Triggered map refresh")
+                    }
+                    .onFailure { error ->
+                        Log.e("MapViewModel", "Failed to submit rating: ${error.message}")
+                        _errors.emit("Failed to submit rating: ${error.message}")
+                    }
+            } catch (e: Exception) {
+                Log.e("MapViewModel", "Exception in submitRating: ${e.message}", e)
             }
         }
     }

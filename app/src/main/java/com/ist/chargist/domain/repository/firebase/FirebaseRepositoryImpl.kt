@@ -25,6 +25,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import android.location.Location
 import com.google.firebase.firestore.FieldPath
+import com.ist.chargist.domain.model.StationRating
 
 class FirebaseRepositoryImpl @Inject constructor(
     private val deviceInfo: DeviceInfoProvider,
@@ -36,7 +37,7 @@ class FirebaseRepositoryImpl @Inject constructor(
 
         private const val STATIONS_DATABASE = "chargerStations"
         private const val SLOTS_DATABASE = "chargerSlots"
-
+        private const val STATION_RATINGS_DATABASE = "stationRatings"
 
         private const val ERROR_NO_INTERNET = "ERROR_NO_INTERNET"
         private const val ERROR_GETTING_LOCATION = "ERROR_GETTING_LOCATION"
@@ -428,6 +429,96 @@ class FirebaseRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun submitStationRating(userId: String, stationId: String, rating: Int): Result<Unit> {
+        if (!deviceInfo.hasInternetConnection()) {
+            return Result.failure(Throwable(ERROR_NO_INTERNET))
+        }
+
+        return try {
+            suspendCoroutine { continuation ->
+                val db = Firebase.firestore
+
+                val ratingDoc = StationRating(
+                    userId = userId,
+                    stationId = stationId,
+                    rating = rating
+                )
+
+                val ratingDocRef = db.collection(STATION_RATINGS_DATABASE)
+                    .document("${stationId}_${userId}")
+
+                val stationRef = db.collection(STATIONS_DATABASE).document(stationId)
+
+                db.runTransaction { transaction ->
+                    val stationSnapshot = transaction.get(stationRef)
+                    if (!stationSnapshot.exists()) {
+                        throw Exception("Station not found")
+                    }
+
+                    @Suppress("UNCHECKED_CAST")
+                    val currentRatingsRaw = stationSnapshot.get("ratings") as? Map<String, Any> ?: emptyMap()
+                    val currentRatings = currentRatingsRaw.mapValues { (it.value as? Number)?.toInt() ?: 0 }.toMutableMap()
+
+                    val currentUserRating = transaction.get(ratingDocRef)
+                        .toObject(StationRating::class.java)
+                        ?.rating
+
+                    currentUserRating?.let { oldRating ->
+                        val oldKey = oldRating.toString()
+                        val currentCount = currentRatings[oldKey] ?: 0
+                        if (currentCount <= 1) {
+                            currentRatings.remove(oldKey)
+                        } else {
+                            currentRatings[oldKey] = currentCount - 1
+                        }
+                    }
+
+                    val newKey = rating.toString()
+                    currentRatings[newKey] = (currentRatings[newKey] ?: 0) + 1
+
+                    val totalRatings = currentRatings.values.sum()
+                    val averageRating = if (totalRatings > 0) {
+                        currentRatings.entries.sumOf { it.key.toInt() * it.value }.toFloat() / totalRatings
+                    } else 0.0f
+
+                    transaction.update(stationRef, mapOf(
+                        "ratings" to currentRatings,
+                        "averageRating" to averageRating,
+                        "totalRatings" to totalRatings
+                    ))
+
+                    transaction.set(ratingDocRef, ratingDoc)
+                }.addOnSuccessListener {
+                    continuation.resume(Result.success(Unit))
+                }.addOnFailureListener { exception ->
+                    continuation.resume(Result.failure(exception))
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e(e)
+            Result.failure(e)
+        }
+    }
+
+
+    override suspend fun getUserRatingForStation(userId: String, stationId: String): Result<Int?> {
+        return try {
+            val db = Firebase.firestore
+            val ratingDoc = db.collection(STATION_RATINGS_DATABASE)
+                .document("${stationId}_${userId}")
+                .get()
+                .await()
+
+            val rating = if (ratingDoc.exists()) {
+                ratingDoc.toObject(StationRating::class.java)?.rating
+            } else null
+
+            Result.success(rating)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     private suspend fun updateChargerStationAvailableSlots(
         stationId: String
     ): Result<Unit> {
@@ -466,6 +557,7 @@ class FirebaseRepositoryImpl @Inject constructor(
             }
         )
     }
+
 
 }
 
