@@ -546,20 +546,25 @@ fun ChargerStationPanel(
                 }
             }
 
-            if (!isAnonymous) {
-                Button(onClick = {
-                    val newSlotId = UUID.randomUUID().toString()
-                    val newSlot = ChargerSlot(
-                        slotId = newSlotId,
-                        stationId = station.id,
-                        speed = ChargeSpeed.F,
-                        connector = Connector.CCS2,
-                        available = true
-                    )
-                    newSlots += newSlot
-                    pendingSlotUpdates[newSlotId] = newSlot
-                }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Add Slot", style = MaterialTheme.typography.bodyMedium)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (!isAnonymous) {
+                    Button(onClick = {
+                        val newSlotId = UUID.randomUUID().toString()
+                        val newSlot = ChargerSlot(
+                            slotId = newSlotId,
+                            stationId = station.id,
+                            speed = ChargeSpeed.F,
+                            connector = Connector.CCS2,
+                            available = true
+                        )
+                        newSlots += newSlot
+                        pendingSlotUpdates[newSlotId] = newSlot
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Add Slot", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                Button(onClick = { viewModel.moveToStation(station) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("See on Map", style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
