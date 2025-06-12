@@ -6,11 +6,11 @@ import kotlinx.parcelize.Parcelize
 @Parcelize
 data class ChargerStation(
     val id: String = "",
-    val name: String,
-    val lat: Float,
-    val lon: Float,
-    val payment: List<String>,
-    val imageUri: String?,
+    val name: String = "",
+    val lat: Float = 0.0f,
+    val lon: Float = 0.0f ,
+    val payment: List<String> = emptyList(),
+    val imageUri: String? = null,
     val fastPrice: Float = 0.0f,
     val mediumPrice: Float = 0.0f,
     val slowPrice: Float = 0.0f,

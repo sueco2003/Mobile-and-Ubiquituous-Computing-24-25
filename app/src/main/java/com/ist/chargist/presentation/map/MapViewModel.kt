@@ -67,7 +67,7 @@ class MapViewModel @Inject constructor(
     private val _stationSlotsCache = mutableStateMapOf<String, List<ChargerSlot>>()
     private val _userLocation = mutableStateOf<LatLng?>(null)
 
-    private var _searchLastStationId = ""
+    private var _searchLastStation = ChargerStation()
     private var _isLoadingMoreSearch = mutableStateOf(false)
     private var _hasMoreSearchData = mutableStateOf(true)
     private var _allSearchResults = mutableStateListOf<ChargerStation>()
@@ -99,7 +99,7 @@ class MapViewModel @Inject constructor(
             val filters = buildFilterList()
 
             dbRepo.getFilteredStations(
-                lastStationID = _searchLastStationId,
+                lastStation = _searchLastStation,
                 searchQuery = _searchQuery.value,
                 filters = filters,
                 userLocation = _userLocation.value
@@ -115,11 +115,10 @@ class MapViewModel @Inject constructor(
                     }
 
                     // Update last station ID for pagination
-                    _searchLastStationId = stations.lastOrNull()?.id ?: ""
+                    _searchLastStation = stations.lastOrNull() ?: ChargerStation()
 
-                    if (!isLoadingMore) {
-                        _searchResults.value = UiState.Success(_allSearchResults.toList())
-                    }
+                    // IMPORTANT: Always update the UI state with the complete list
+                    _searchResults.value = UiState.Success(_allSearchResults.toList())
                 }
             }.onFailure { error ->
                 if (!isLoadingMore) {
@@ -137,18 +136,22 @@ class MapViewModel @Inject constructor(
         }
     }
 
+    // Also update the loadMoreSearchResults method to ensure proper state management:
     fun loadMoreSearchResults() {
         if (_isLoadingMoreSearch.value || !_hasMoreSearchData.value) return
 
         viewModelScope.launch {
             _isLoadingMoreSearch.value = true
-            getFilteredStationsForSearch(isLoadingMore = true)
-            _isLoadingMoreSearch.value = false
+            try {
+                getFilteredStationsForSearch(isLoadingMore = true)
+            } finally {
+                _isLoadingMoreSearch.value = false
+            }
         }
     }
 
     private fun resetSearchPagination() {
-        _searchLastStationId = ""
+        _searchLastStation = ChargerStation()
         _hasMoreSearchData.value = true
         _allSearchResults.clear()
     }

@@ -7,7 +7,7 @@ import com.ist.chargist.domain.model.ChargerStation
 interface DatabaseRepository {
 
     suspend fun getFilteredStations(
-        lastStationID: String,
+        lastStation: ChargerStation,
         searchQuery: String = "",
         filters: List<String> = emptyList(),
         userLocation: LatLng? = null,

@@ -51,17 +51,18 @@ class FirebaseRepositoryImpl @Inject constructor(
     private val repositoryScope = CoroutineScope(dispatcherProvider.io())
 
     override suspend fun getFilteredStations(
-        lastStationID: String,
+        lastStation: ChargerStation,
         searchQuery: String,
         filters: List<String>,
         userLocation: LatLng?
     ): Result<List<ChargerStation>> {
+
         if (!deviceInfo.hasInternetConnection()) {
             return Result.failure(Throwable(ERROR_NO_INTERNET))
         }
 
         Timber.tag("FirebaseRepository")
-            .d("getFilteredStations called with lastStationID: $lastStationID, searchQuery: $searchQuery, filters: $filters, userLocation: $userLocation")
+            .d("getFilteredStations called with lastStationID: $lastStation, searchQuery: $searchQuery, filters: $filters, userLocation: $userLocation")
         val availableSlotsFilter = filters.contains("available")
         val paymentFilters = filters.filter { it in listOf("credit", "paypal", "cash") }
         val speedFilters = filters.filter { it in listOf("fast", "medium", "slow") }
@@ -89,37 +90,42 @@ class FirebaseRepositoryImpl @Inject constructor(
                     query = query.whereEqualTo("availableSlots", true)
                 }
 
-                if (orderByPrice && searchQuery.isBlank())
+                if (orderByPrice && searchQuery.isBlank()) {
                     query = query.orderBy("lowestPrice", computeDirection(direction))
-
-                if(searchQuery.isBlank())
-                    query = query.orderBy(FieldPath.documentId(), Query.Direction.ASCENDING)
-
-                if (lastStationID.isNotEmpty()) {
-                    query = query.startAfter(lastStationID)
+                    if (lastStation.id != "") {
+                        query = query.startAfter(lastStation.lowestPrice)
+                    }
                 }
 
-                query.limit(5)
+                var limit = 7L
+                if (orderByDistance && userLocation != null) {
+                    limit = 50L
+                }
+
+                query.limit(limit)
                     .get()
                     .addOnSuccessListener { documentSnapshot ->
                         val stations = documentSnapshot.toObjects(ChargerStationDtoFirebase::class.java)
                         val chargerStations = stations.map { it.toChargerStation() }
                         Timber.tag("FirebaseRepository")
+                            .d("FetchedChargerStations: ${chargerStations.size}")
+                        Timber.tag("FirebaseRepository")
                             .d("FetchedChargerStations: $chargerStations")
-                        var sortedStations = chargerStations
-                        if(!orderByPrice) {
-                            sortedStations = if (orderByDistance && userLocation != null) {
-                                val stationsWithDistance = chargerStations.sortedWith(
-                                    compareBy { calculateDistance(it, userLocation) }
-                                )
-                                if (direction == "descending") stationsWithDistance.reversed() else stationsWithDistance
-                            } else {
-                                chargerStations
-                            }
+                        val sortedStations = if (orderByDistance && userLocation != null) {
+                            val sorted = chargerStations.sortedBy { calculateDistance(it, userLocation) }
+                            if (direction == "descending") sorted.reversed() else sorted
+                        } else if (orderByPrice) {
+                            val sorted = chargerStations.sortedBy { it.lowestPrice }
+                            if (direction == "descending") sorted.reversed() else sorted
+                        } else {
+                            chargerStations
                         }
 
+                        val startIndex = sortedStations.indexOfFirst { it.id == lastStation.id } + 1
+                        val paginated = sortedStations.drop(startIndex).take(7)
 
-                        continuation.resume(Result.success(sortedStations))
+                        continuation.resume(Result.success(paginated))
+
                     }.addOnFailureListener { exception ->
                         Timber.tag("FirebaseRepository")
                             .d("Error no fetched stations: $exception")

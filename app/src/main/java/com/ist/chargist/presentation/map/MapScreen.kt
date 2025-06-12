@@ -82,6 +82,8 @@ import com.ist.chargist.presentation.components.FilterSortDialog
 import com.ist.chargist.utils.UiState
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.size
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,6 +107,8 @@ fun MapScreen(
     val favoriteIds by viewModel.favouriteStationIds
 
     var searchQuery by remember { mutableStateOf("") }
+    val isLoadingMore by viewModel.isLoadingMoreSearch
+    val hasMoreData by viewModel.hasMoreSearchData
 
     LaunchedEffect(searchQuery) {
         viewModel.handleSearchInput(searchQuery)
@@ -308,6 +312,7 @@ fun MapScreen(
                     is UiState.Success -> state.data as? List<ChargerStation> ?: emptyList()
                     else -> emptyList()
                 }
+
                 Popup(alignment = Alignment.Center) {
                     Box(
                         Modifier.clickable(
@@ -331,7 +336,10 @@ fun MapScreen(
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth(0.9f)
-                                    .padding(horizontal = 16.dp)
+                                    .padding(horizontal = 16.dp),
+                                viewModel = viewModel,
+                                isLoadingMore = isLoadingMore,
+                                hasMoreData = hasMoreData
                             )
                         }
                     }
@@ -513,7 +521,10 @@ fun ZoomControls(
 fun StationSearchResults(
     stations: List<ChargerStation>,
     onStationClick: (ChargerStation) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: MapViewModel, // Add viewModel parameter
+    isLoadingMore: Boolean = false,
+    hasMoreData: Boolean = true
 ) {
     Card(
         modifier = modifier.heightIn(max = 500.dp),
@@ -521,12 +532,49 @@ fun StationSearchResults(
         shape = RoundedCornerShape(8.dp)
     ) {
         LazyColumn {
-            // Add the count parameter first
             items(
-                count = stations.size,  // This is the Int parameter
-                key = { index -> stations[index].id }  // Add key for better performance
+                count = stations.size,
+                key = { index -> stations[index].id }
             ) { index ->
                 StationSearchItem(stations[index], onStationClick)
+
+                if (index >= stations.size - 3 && hasMoreData && !isLoadingMore) {
+                    LaunchedEffect(stations.size) {
+                        viewModel.loadMoreSearchResults()
+                    }
+                }
+            }
+
+            if (isLoadingMore) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
+
+            if (!hasMoreData && stations.isNotEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No more results",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
     }
