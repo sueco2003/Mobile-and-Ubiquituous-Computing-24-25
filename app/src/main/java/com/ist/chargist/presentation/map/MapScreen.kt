@@ -267,6 +267,7 @@ fun MapScreen(
                     query = searchQuery,
                     onQueryChange = {
                         searchQuery = it
+                        showChargerStationResults = true
                     },
                     onSearch = { viewModel.searchLocation(it, context) },
                     active = false,
