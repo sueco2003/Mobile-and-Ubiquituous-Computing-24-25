@@ -118,10 +118,6 @@ class FirebaseRepositoryImpl @Inject constructor(
                         // add to cache
                         chargerStations.forEach { _stations[it.id] = it }
 
-                        Timber.tag("FirebaseRepository")
-                            .d("FetchedChargerStations: ${chargerStations.size}")
-                        Timber.tag("FirebaseRepository")
-                            .d("FetchedChargerStations: $chargerStations")
                         val sortedStations = if (orderByDistance && userLocation != null) {
                             val sorted = chargerStations.sortedBy { calculateDistance(it, userLocation) }
                             if (direction == "descending") sorted.reversed() else sorted
@@ -138,8 +134,6 @@ class FirebaseRepositoryImpl @Inject constructor(
                         continuation.resume(Result.success(paginated))
 
                     }.addOnFailureListener { exception ->
-                        Timber.tag("FirebaseRepository")
-                            .d("Error no fetched stations: $exception")
                         continuation.resume(Result.failure(exception))
                     }
             }
