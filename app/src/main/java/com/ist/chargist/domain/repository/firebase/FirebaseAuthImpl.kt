@@ -1,7 +1,5 @@
 package com.ist.chargist.domain.repository.firebase
 
-
-
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -47,29 +45,26 @@ class FirebaseAuthImpl @Inject constructor(
             return Result.failure(Throwable(ERROR_NO_INTERNET))
         }
 
-        // Validate email and password
         if (email.isEmpty() || password.isEmpty()) {
             return Result.failure(Throwable(ERROR_INPUTS_EMPTY))
         }
 
         return try {
-            // Create a suspend coroutine to handle asynchronous task
             suspendCoroutine { continuation ->
                 FirebaseAuth.getInstance()
                     .signInWithEmailAndPassword(email, password)
                     .addOnSuccessListener { authResult ->
-                        // Sign in was successful, return user UID
+                        // sign in was successful, return user UID
                         continuation.resume(
                             Result.success(authResult.user?.uid ?: ERROR_USER_ID_NOT_AVAILABLE)
                         )
                     }
                     .addOnFailureListener { exception ->
-                        // Sign in failed, return the exception
+                        // sign in failed, return the exception
                         continuation.resume(Result.failure(Throwable(ERROR_SIGNING_IN + exception.message)))
                     }
             }
         } catch (e: Exception) {
-            // Return a failure result in case of an unexpected exception
             Result.failure(Throwable(ERROR_UNEXPECTED + e.message))
         }
     }
@@ -79,13 +74,11 @@ class FirebaseAuthImpl @Inject constructor(
             return Result.failure(Throwable(ERROR_NO_INTERNET))
         }
 
-        // Validate email and password
         if (email.isEmpty() || password.isEmpty()) {
             return Result.failure(Throwable(ERROR_CHECK_INPUTS))
         }
 
         return try {
-            // Create a user account with email and password
             val task = FirebaseAuth.getInstance()
                 .createUserWithEmailAndPassword(email, password)
 
@@ -116,26 +109,23 @@ class FirebaseAuthImpl @Inject constructor(
             return Result.failure(Throwable(ERROR_NO_INTERNET))
         }
 
-        // Validate user input
         val newUser = user?.let {
             User(
                 userId = it.uid,
                 userEmail = it.email ?: "Unknown",
-                favourites = emptyList()// Provide default value if displayName is null
+                favourites = emptyList()
             )
         } ?: return Result.failure(Throwable(ERROR_INVALID_USER))
 
         return try {
-            // Use Firebase's suspend function to add new user data
             Firebase.firestore
                 .collection(USERS_DATABASE)
                 .document(newUser.userId)
                 .set(newUser)
-                .await() // Use await() to handle the operation as a suspend function
+                .await()
 
-            Result.success(Unit) // Return success if the operation completes
+            Result.success(Unit)
         } catch (e: Exception) {
-            // Return failure with the caught exception
             Result.failure(e)
         }
     }
@@ -145,5 +135,4 @@ class FirebaseAuthImpl @Inject constructor(
     override fun isUserAnonymous(): Boolean = FirebaseAuth.getInstance().currentUser?.isAnonymous == true
 
     override fun signOutUser() = FirebaseAuth.getInstance().signOut()
-
 }

@@ -1,6 +1,6 @@
 package com.ist.chargist.presentation.map
 
-
+import android.util.Log
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
@@ -114,7 +114,7 @@ fun MapScreen(
         viewModel.handleSearchInput(searchQuery)
     }
 
-    var selectedStation by remember { mutableStateOf<ChargerStation?>(null) }
+    var selectedStationId by remember { mutableStateOf("") }
     var showPanel by remember { mutableStateOf(false) }
     var closestStation by remember { mutableStateOf<ChargerStation?>(null) }
     var location by remember { mutableStateOf<LatLng?>(null) }
@@ -198,7 +198,6 @@ fun MapScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraState,
@@ -224,7 +223,7 @@ fun MapScreen(
                             ),
                             icon = BitmapDescriptorFactory.defaultMarker(hue),
                             onClick = {
-                                selectedStation = station
+                                selectedStationId = station.id
                                 showPanel = true
                                 false
                             }
@@ -328,7 +327,7 @@ fun MapScreen(
                             StationSearchResults(
                                 stations = searchStations,
                                 onStationClick = { station ->
-                                    selectedStation = station
+                                    selectedStationId = station.id
                                     showPanel = true
                                     viewModel.moveToStation(station)
                                     searchQuery = ""
@@ -347,9 +346,7 @@ fun MapScreen(
             }
         }
 
-
-
-        if (showPanel && selectedStation != null) {
+        if (showPanel && selectedStationId.isNotEmpty()) {
             Popup(alignment = Alignment.Center) {
                 Box(
                     Modifier
@@ -357,7 +354,7 @@ fun MapScreen(
                         .clickable(
                             onClick = {
                                 showPanel = false
-                                selectedStation = null
+                                selectedStationId = ""
                             },
                             indication = null,
                             interactionSource = remember { MutableInteractionSource() }
@@ -370,15 +367,15 @@ fun MapScreen(
                             .heightIn(max = 400.dp)
                             .verticalScroll(rememberScrollState())
                     ) {
-                        val isFavorite = ((favoriteIds as? UiState.Success)?.data as? List<String>?)?.contains(selectedStation!!.id) == true
+                        val isFavorite = ((favoriteIds as? UiState.Success)?.data as? List<String>?)?.contains(selectedStationId) == true
                         ChargerStationPanel(
-                            station = selectedStation!!,
+                            stationId = selectedStationId,
                             isAnonymous = isAnonymous,
                             viewModel = viewModel,
                             isFavorite = isFavorite,
-                            onToggleFavorite = { viewModel.toggleFavorite(selectedStation!!.id) },
+                            onToggleFavorite = { viewModel.toggleFavorite(selectedStationId) },
                             onDismiss = {
-                                selectedStation = null
+                                selectedStationId = ""
                                 showPanel = false
                             }
                         )

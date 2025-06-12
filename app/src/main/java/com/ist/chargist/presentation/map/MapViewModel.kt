@@ -35,6 +35,8 @@ class MapViewModel @Inject constructor(
     private val dbRepo: DatabaseRepository,
     private val locationClient: FusedLocationProviderClient
 ) : ViewModel() {
+    private val _selectedStation = mutableStateOf<UiState>(UiState.Idle)
+    val selectedStation: State<UiState> get() = _selectedStation
 
     private val _mapStations = mutableStateOf<UiState>(UiState.Idle)
     val mapStations: State<UiState> get() = _mapStations
@@ -64,7 +66,6 @@ class MapViewModel @Inject constructor(
     private val _activeFilters = mutableStateListOf<String>()
     private var _selectedSort by mutableStateOf("distance")
     private var _sortAscending by mutableStateOf(true)
-    private val _stationSlotsCache = mutableStateMapOf<String, List<ChargerSlot>>()
     private val _userLocation = mutableStateOf<LatLng?>(null)
 
     private var _searchLastStation = ChargerStation()
@@ -75,7 +76,6 @@ class MapViewModel @Inject constructor(
     val searchQuery: String get() = _searchQuery.value
     val isLoadingMoreSearch: State<Boolean> get() = _isLoadingMoreSearch
     val hasMoreSearchData: State<Boolean> get() = _hasMoreSearchData
-
 
     suspend fun getAllStationsForMap() {
         _mapStations.value = UiState.Loading
@@ -210,7 +210,6 @@ class MapViewModel @Inject constructor(
         return filters
     }
 
-
     fun toggleFavorite(stationId: String) {
         viewModelScope.launch {
             val uid = authRepo.getCurrentUser().uid
@@ -278,11 +277,6 @@ class MapViewModel @Inject constructor(
                 dbRepo.createOrUpdateChargerSlot(slot.stationId, slot)
                     .onFailure { Timber.e("Slot update failed: ${it.message}") }
             }
-
-            slots.map { it.stationId }.toSet().forEach { stationId ->
-                _stationSlotsCache.remove(stationId)
-            }
-
             getAllStationsForMap()
         }
     }
@@ -309,6 +303,27 @@ class MapViewModel @Inject constructor(
         return authRepo.isUserAnonymous()
     }
 
+    fun clearSelectedStation() {
+        _selectedStation.value = UiState.Idle
+    }
+
+    fun getStationById(stationId: String) {
+        viewModelScope.launch {
+            _selectedStation.value = UiState.Loading
+            try {
+                dbRepo.getChargerStation(stationId)
+                    .onSuccess { station ->
+                        _selectedStation.value = UiState.Success(station)
+                    }
+                    .onFailure {
+                        _selectedStation.value = UiState.Fail(it.message ?: "Failed to fetch station")
+                    }
+            } catch (e: Exception) {
+                _selectedStation.value = UiState.Fail(e.message ?: "Unexpected error")
+            }
+        }
+    }
+
     fun getSlotsForStation(stationId: String) {
         viewModelScope.launch {
             _slotLocation.value = UiState.Loading
@@ -316,7 +331,6 @@ class MapViewModel @Inject constructor(
                 dbRepo.getSlotsForStation(stationId)
                     .onSuccess {
                         _slotLocation.value = UiState.Success(it)
-                        _stationSlotsCache[stationId] = it
                     }
                     .onFailure {
                         _slotLocation.value = UiState.Fail(it.message ?: "Unknown error")
