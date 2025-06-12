@@ -74,6 +74,7 @@ import java.util.Locale
 import java.util.UUID
 import android.content.Intent
 import android.util.Log
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -842,7 +843,7 @@ fun RatingHistogram(ratings: Map<String, Int>, totalRatings: Int) {
                 ) {
                     Box(
                         modifier = Modifier
-                            //.fillMaxHeight()
+                            .fillMaxHeight()
                             .fillMaxWidth(percentage)
                             .background(
                                 MaterialTheme.colorScheme.primary,
