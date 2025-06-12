@@ -137,6 +137,7 @@ fun ChargerStationPanel(
             if (pendingSlotUpdates.isNotEmpty()) {
                 viewModel.updateSlots(pendingSlotUpdates.values.toList())
             }
+            viewModel.clearSelectedStation()
             onDismiss()
         }
     }

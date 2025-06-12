@@ -665,7 +665,6 @@ class FirebaseRepositoryImpl @Inject constructor(
         }
     }
 
-
     override suspend fun getUserRatingForStation(userId: String, stationId: String): Result<Int?> {
         return try {
             val db = Firebase.firestore
