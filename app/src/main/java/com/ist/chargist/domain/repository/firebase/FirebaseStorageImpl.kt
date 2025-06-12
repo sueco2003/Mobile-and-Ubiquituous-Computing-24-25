@@ -9,11 +9,7 @@ import javax.inject.Inject
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
-
-
 class FirebaseStorageImpl @Inject constructor() : ImageRepository {
-
-
     private val defaultImageMapper = mutableMapOf<String, Int>()
 
     override suspend fun uploadImage(
@@ -24,7 +20,6 @@ class FirebaseStorageImpl @Inject constructor() : ImageRepository {
         return suspendCoroutine { continuation ->
             val storageRef = Firebase.storage.reference
             val imageRef = storageRef.child("$referenceId/$fileName")
-
 
             imageRef.putFile(fileUri)
                 .addOnSuccessListener {

@@ -24,7 +24,12 @@ import javax.inject.Inject
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import android.location.Location
+import android.util.Log
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import com.google.firebase.firestore.FieldPath
+import com.google.firebase.firestore.toObject
+import kotlin.math.cos
 import com.ist.chargist.domain.model.StationRating
 
 class FirebaseRepositoryImpl @Inject constructor(
@@ -32,7 +37,6 @@ class FirebaseRepositoryImpl @Inject constructor(
     private val imageRepository: ImageRepository,
     private val dispatcherProvider: DispatcherProvider
 ) : DatabaseRepository {
-
     companion object {
 
         private const val STATIONS_DATABASE = "chargerStations"
@@ -47,6 +51,12 @@ class FirebaseRepositoryImpl @Inject constructor(
         private const val ERROR_ASSET_NOT_FOUND = "ERROR_ASSET_NOT_FOUND"
         private const val ERROR_ASSET_INCONSISTENT_STATE = "ERROR_ASSET_INCONSISTENT_STATE"
     }
+
+    // cache data to avoid redundant network calls
+    private val _stations = mutableStateMapOf<String, ChargerStation>()
+    private val _slots = mutableStateMapOf<String, List<ChargerSlot>>()
+    private val _favourites = mutableStateListOf<String>()
+    private var _favouritesLastFetched: Long? = null
 
     private val repositoryScope = CoroutineScope(dispatcherProvider.io())
 
@@ -155,20 +165,34 @@ class FirebaseRepositoryImpl @Inject constructor(
 
 
     override suspend fun getChargerStations(): Result<List<ChargerStation>> {
+        // TODO: could implement the logic of fresh fetch if connected to wifi
+        if (_stations.isNotEmpty()) {
+            return Result.success(_stations.values.toList())
+        }
+
         if (!deviceInfo.hasInternetConnection()) {
             return Result.failure(Throwable(ERROR_NO_INTERNET))
         }
 
+        Timber.tag("FirebaseRepositoryImpl").i("fetching charger stations")
         return try {
             suspendCoroutine { continuation ->
                 Firebase.firestore
                     .collection(STATIONS_DATABASE)
                     .get()
                     .addOnSuccessListener { documentSnapshot ->
-                        val stations =
-                            documentSnapshot.toObjects(ChargerStationDtoFirebase::class.java)
-                        continuation.resume(Result.success(stations.map { it.toChargerStation() }))
-                    }.addOnFailureListener { exception ->
+                        val stations = documentSnapshot
+                            .toObjects(ChargerStationDtoFirebase::class.java)
+                            .map { it.toChargerStation() }
+
+                        _stations.clear()
+                        stations.forEach { station ->
+                            _stations[station.id] = station
+                        }
+
+                        continuation.resume(Result.success(stations))
+                    }
+                    .addOnFailureListener { exception ->
                         continuation.resume(Result.failure(exception))
                     }
             }
@@ -178,21 +202,107 @@ class FirebaseRepositoryImpl @Inject constructor(
         }
     }
 
-
-    override suspend fun getSlotsForStation(stationId: String): Result<List<ChargerSlot>> {
+    override suspend fun getNearbyStations(lat: Double, lon: Double): Result<List<ChargerStation>> {
         if (!deviceInfo.hasInternetConnection()) {
             return Result.failure(Throwable(ERROR_NO_INTERNET))
         }
 
+        val radiusDegree = 1.0 // 1 degree is roughly 111km
+
+        val minLat = lat - radiusDegree
+        val maxLat = lat + radiusDegree
+        val minLon = lon - radiusDegree
+        val maxLon = lon + radiusDegree
+
+        return try {
+            suspendCoroutine { continuation ->
+                Firebase.firestore
+                    .collection(STATIONS_DATABASE)
+                    .whereGreaterThanOrEqualTo("lat", minLat)
+                    .whereLessThanOrEqualTo("lat", maxLat)
+                    .whereGreaterThanOrEqualTo("lon", minLon)
+                    .whereLessThanOrEqualTo("lon", maxLon)
+                    .get()
+                    .addOnSuccessListener { snapshot ->
+                        val stations = snapshot.toObjects(ChargerStationDtoFirebase::class.java)
+                            .map { it.toChargerStation() }
+
+                        // update cache
+                        stations.forEach { _stations[it.id] = it }
+
+                        continuation.resume(Result.success(stations))
+                    }
+                    .addOnFailureListener { exception ->
+                        continuation.resume(Result.failure(exception))
+                    }
+            }
+        } catch (e: Exception) {
+            Timber.e(e)
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getChargerStation(stationId: String): Result<ChargerStation> {
+        if (!deviceInfo.hasInternetConnection()) {
+            _stations[stationId]?.let { cachedStation ->
+                return Result.success(cachedStation)
+            }
+            return Result.failure(Throwable(ERROR_NO_INTERNET))
+        }
+
+        Timber.tag("FirebaseRepositoryImpl").i("fetching charger station with id: $stationId")
+        return try {
+            suspendCoroutine { continuation ->
+                Firebase.firestore
+                    .collection(STATIONS_DATABASE)
+                    .document(stationId)
+                    .get()
+                    .addOnSuccessListener { documentSnapshot ->
+                        val station = documentSnapshot
+                            .toObject(ChargerStationDtoFirebase::class.java)
+                            ?.toChargerStation()
+
+                        if (station == null) {
+                            continuation.resume(Result.failure(Throwable("Charger station not found")))
+                            return@addOnSuccessListener
+                        }
+
+                        _stations[station.id] = station
+                        continuation.resume(Result.success(station))
+                    }
+                    .addOnFailureListener { exception ->
+                        continuation.resume(Result.failure(exception))
+                    }
+            }
+        } catch (e: Exception) {
+            Timber.e(e)
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getSlotsForStation(stationId: String, forceRefresh: Boolean): Result<List<ChargerSlot>> {
+        if (!forceRefresh && !deviceInfo.hasInternetConnection()) {
+            _slots[stationId]?.let { cachedSlots ->
+                return Result.success(cachedSlots)
+            }
+            return Result.failure(Throwable(ERROR_NO_INTERNET))
+        }
+
+        Timber.tag("FirebaseRepositoryImpl").i("fetching slots for station: $stationId")
         return try {
             suspendCoroutine { continuation ->
                 Firebase.firestore
                     .collection(SLOTS_DATABASE)
-                    .whereEqualTo("stationId", stationId) // <<-- filter at database level
+                    .whereEqualTo("stationId", stationId)
                     .get()
                     .addOnSuccessListener { documentSnapshot ->
-                        val slots = documentSnapshot.toObjects(ChargerSlotDtoFirebase::class.java)
-                        continuation.resume(Result.success(slots.map { it.toChargerSlot() }))
+                        val slots = documentSnapshot
+                            .toObjects(ChargerSlotDtoFirebase::class.java)
+                            .map { it.toChargerSlot() }
+
+                        _slots[stationId] = slots
+
+                        continuation.resume(Result.success(slots))
                     }.addOnFailureListener { exception ->
                         continuation.resume(Result.failure(exception))
                     }
@@ -217,26 +327,27 @@ class FirebaseRepositoryImpl @Inject constructor(
             createOrUpdateChargerSlot(stationToInsert.id, slot)
         }
 
-        // Extract only successful slot IDs
+        // extract only successful slot IDs
         val successfulSlotIds: List<String> = newSlotIds.mapNotNull { result ->
-            result.getOrNull()  // returns the String on success, or null on failure
+            result.getOrNull()
         }
 
-        // Now create a new list combining old slotsId + successful ones
         stationToInsert.slotsId = stationToInsert.slotsId + successfulSlotIds
-
         stationToInsert.availableSlots = stationToInsert.slotsId.isNotEmpty()
 
+        Timber.tag("FirebaseRepositoryImpl").i("creating/updating charger station with id: ${stationToInsert.id}")
         return try {
-
             suspendCoroutine { continuation ->
                 Firebase.firestore
                     .collection(STATIONS_DATABASE)
                     .document(stationToInsert.id)
                     .set(stationToInsert)
                     .addOnCompleteListener {
-                        continuation.resume(Result.success(listOf(stationToInsert.toChargerStation())))
-                    }.addOnFailureListener { exception ->
+                        val updatedStation = stationToInsert.toChargerStation()
+                        _stations[updatedStation.id] = updatedStation
+                        continuation.resume(Result.success(listOf(updatedStation))) // TODO: why list
+                    }
+                    .addOnFailureListener { exception ->
                         continuation.resume(Result.failure(exception))
                     }
             }
@@ -256,6 +367,7 @@ class FirebaseRepositoryImpl @Inject constructor(
 
         val slotToInsert = slot.toChargerSlotDtoFirebase(stationId)
 
+        Timber.tag("FirebaseRepositoryImpl").i("creating/updating charger slot with id: ${slotToInsert.slotId}")
         return try {
             val result = suspendCoroutine<Result<String>> { continuation ->
                 Firebase.firestore
@@ -277,8 +389,25 @@ class FirebaseRepositoryImpl @Inject constructor(
                         continuation.resume(Result.failure(exception))
                     }
             }
-            // Update available slots after slot is created/updated
+
+            // update cache
+            result.getOrNull()?.let { _ ->
+                val updatedList = _slots[stationId].orEmpty().toMutableList()
+
+                // replace existing slot if already cached, or add it
+                val existingIndex = updatedList.indexOfFirst { it.slotId == slot.slotId }
+                if (existingIndex >= 0) {
+                    updatedList[existingIndex] = slot
+                } else {
+                    updatedList += slot
+                }
+
+                _slots[stationId] = updatedList
+            }
+
+            // update available slots after slot is created/updated
             updateChargerStationAvailableSlots(stationId)
+
             result
         } catch (e: Exception) {
             Timber.e(e)
@@ -286,8 +415,102 @@ class FirebaseRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun getFavorites(userId: String): Result<List<String>> {
+        val now = System.currentTimeMillis()
+        val tenMinutes = 10 * 60 * 1000
+
+        if (_favourites.isNotEmpty() && _favouritesLastFetched != null &&
+            now - _favouritesLastFetched!! < tenMinutes
+        ) {
+            return Result.success(_favourites)
+        }
+
+        if (!deviceInfo.hasInternetConnection()) {
+            return Result.failure(Throwable(ERROR_NO_INTERNET))
+        }
+
+        Timber.tag("FirebaseRepositoryImpl").i("fetching favourites for user: $userId")
+        return try {
+            suspendCoroutine { continuation ->
+                Firebase.firestore.collection("users")
+                    .document(userId)
+                    .get()
+                    .addOnSuccessListener { document ->
+                        val favourites = document.get("favourites") as? List<String> ?: emptyList()
+
+                        // update cache
+                        _favourites.clear()
+                        _favourites.addAll(favourites)
+                        _favouritesLastFetched = now
+
+                        continuation.resume(Result.success(favourites))
+                    }
+                    .addOnFailureListener {
+                        continuation.resume(Result.failure(it))
+                    }
+            }
+        } catch (e: Exception) {
+            Timber.e(e)
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun toggleFavorite(userId: String, stationId: String): Result<Unit> {
+        if (!deviceInfo.hasInternetConnection()) {
+            return Result.failure(Throwable(ERROR_NO_INTERNET))
+        }
+
+        Timber.tag("FirebaseRepositoryImpl").i("toggling favourite for user: $userId, and station: $stationId")
+        return try {
+            suspendCoroutine { continuation ->
+
+                val userDocRef = Firebase.firestore.collection("users").document(userId)
+
+                userDocRef.get()
+                    .addOnSuccessListener { snapshot ->
+                        val favorites = snapshot.get("favourites") as? List<String> ?: emptyList()
+
+                        val isRemoving = favorites.contains(stationId)
+                        val updateValue = if (isRemoving) {
+                            FieldValue.arrayRemove(stationId)
+                        } else {
+                            FieldValue.arrayUnion(stationId)
+                        }
+
+                        userDocRef.update("favourites", updateValue)
+                            .addOnSuccessListener {
+                                // update cache
+                                val updatedFavorites = if (isRemoving) {
+                                    favorites.filterNot { it == stationId }
+                                } else {
+                                    favorites + stationId
+                                }
+                                _favourites.clear()
+                                _favourites.addAll(updatedFavorites)
+                                _favouritesLastFetched = System.currentTimeMillis()
+
+                                continuation.resume(Result.success(Unit))
+                            }
+                            .addOnFailureListener {
+                                continuation.resume(Result.failure(it))
+                            }
+                    }
+                    .addOnFailureListener {
+                        continuation.resume(Result.failure(it))
+                    }
+            }
+        } catch (e: Exception) {
+            Timber.e(e)
+            Result.failure(e)
+        }
+    }
 
     override suspend fun reportDamagedSlot(slotId: String): Result<Unit> {
+        if (!deviceInfo.hasInternetConnection()) {
+            return Result.failure(Throwable(ERROR_NO_INTERNET))
+        }
+
+        Timber.tag("FirebaseRepositoryImpl").i("reporting damage for slot: $slotId")
         return try {
             val report = mapOf(
                 "slotId" to slotId,
@@ -305,82 +528,23 @@ class FirebaseRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun toggleFavorite(userId: String, stationId: String): Result<Unit> {
-        if (!deviceInfo.hasInternetConnection()) {
-            return Result.failure(Throwable(ERROR_NO_INTERNET))
-        }
-
-        return try {
-            suspendCoroutine { continuation ->
-
-                val userDocRef = Firebase.firestore.collection("users").document(userId)
-
-                userDocRef.get()
-                    .addOnSuccessListener { snapshot ->
-                        val favorites = snapshot.get("favourites") as? List<String> ?: emptyList()
-                        val updateValue = if (favorites.contains(stationId)) {
-                            FieldValue.arrayRemove(stationId)
-                        } else {
-                            FieldValue.arrayUnion(stationId)
-                        }
-
-                        userDocRef.update("favourites", updateValue)
-                            .addOnSuccessListener {
-                                continuation.resume(Result.success(Unit))
-                            }
-                            .addOnFailureListener {
-                                continuation.resume(Result.failure(it))
-                            }
-                    }
-                    .addOnFailureListener {
-                        continuation.resume(Result.failure(it))
-                    }
-            }
-        } catch (e: Exception) {
-            Timber.e(e)
-            Result.failure(e)
-        }
-    }
-
-
-    override suspend fun getFavorites(userId: String): Result<List<String>> {
-        if (!deviceInfo.hasInternetConnection()) {
-            return Result.failure(Throwable(ERROR_NO_INTERNET))
-        }
-
-        return try {
-            suspendCoroutine { continuation ->
-                Firebase.firestore.collection("users")
-                    .document(userId)
-                    .get()
-                    .addOnSuccessListener { document ->
-                        val favs = document.get("favourites") as? List<String> ?: emptyList()
-                        continuation.resume(Result.success(favs))
-                    }
-                    .addOnFailureListener {
-                        continuation.resume(Result.failure(it))
-                    }
-            }
-        } catch (e: Exception) {
-            Timber.e(e)
-            Result.failure(e)
-        }
-    }
-
     override suspend fun getLatestDamageReportTimestamp(slotId: String): Result<Long?> {
         if (!deviceInfo.hasInternetConnection()) {
             return Result.failure(Throwable(ERROR_NO_INTERNET))
         }
 
+        Timber.tag("FirebaseRepositoryImpl").i("fetching damage report for slot: $slotId")
         return try {
             suspendCoroutine { continuation ->
                 Firebase.firestore
                     .collection("slotReports")
-                    .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .whereEqualTo("slotId", slotId)
+                    .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING) // Sort by timestamp
+                    .limit(1) // Only fetch the latest
                     .get()
                     .addOnSuccessListener { snapshot ->
                         val timestamp = snapshot.documents
-                            .firstOrNull { it.getString("slotId") == slotId }
+                            .firstOrNull()
                             ?.getLong("timestamp")
                         continuation.resume(Result.success(timestamp))
                     }
@@ -399,6 +563,7 @@ class FirebaseRepositoryImpl @Inject constructor(
             return Result.failure(Throwable(ERROR_NO_INTERNET))
         }
 
+        Timber.tag("FirebaseRepositoryImpl").i("reporting damage for slot: $slotId")
         return try {
             suspendCoroutine { continuation ->
                 Firebase.firestore
@@ -526,13 +691,11 @@ class FirebaseRepositoryImpl @Inject constructor(
             return Result.failure(Throwable(ERROR_NO_INTERNET))
         }
 
-        return getSlotsForStation(stationId).fold(
+        return getSlotsForStation(stationId, true).fold(
             onSuccess = { slots ->
-                Timber.tag("FirebaseRepository")
-                    .d("updateChargerStationAvailableSlots called for stationId: $slots")
+                Timber.tag("FirebaseRepositoryImpl").i("updating available property for station: $stationId")
+
                 val hasAvailableSlots = slots.any { it.available }
-                Timber.tag("FirebaseRepository")
-                    .d("updateChargerStationAvailableSlots: stationId=$stationId, hasAvailableSlots=$hasAvailableSlots")
                 try {
                     suspendCoroutine { continuation ->
                         Firebase.firestore
@@ -540,6 +703,11 @@ class FirebaseRepositoryImpl @Inject constructor(
                             .document(stationId)
                             .update("availableSlots", hasAvailableSlots)
                             .addOnSuccessListener {
+                                // update cache
+                                _stations[stationId]?.let { cachedStation ->
+                                    _stations[stationId] = cachedStation.copy(availableSlots = hasAvailableSlots)
+                                }
+
                                 continuation.resume(Result.success(Unit))
                             }
                             .addOnFailureListener { exception ->
@@ -557,7 +725,6 @@ class FirebaseRepositoryImpl @Inject constructor(
             }
         )
     }
-
 
 }
 
